@@ -59,11 +59,11 @@ class Vehicle:
         return self.x, self.y, self.yaw
 
 def generate_reference_path_from_vehicle(vehicle, distance=50):
-    """Vehicle의 현재 위치에서 전방으로 경로 생성, mapx, mapy 초기화"""
+    """Vehicle의 현재 위치에서 경로 생성, mapx, mapy 초기화"""
     # 현재 차량 위치
     current_x, current_y, current_yaw = vehicle.get_position()
     
-    # 전방으로 직선 경로 생성 (mapx, mapy)
+    # 직선 경로 생성 (mapx, mapy)
     mapx = []  # 경로의 x 좌표들
     mapy = []  # 경로의 y 좌표들
     
