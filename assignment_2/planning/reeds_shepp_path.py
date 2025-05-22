@@ -9,7 +9,7 @@ from utils.path_type_funcs import (
     pi_2_pi
 )
 
-# 사용하는 모든 패턴 저장 논문을 참고해 작성했다. (가장 많이 사용하는 유형 들)
+# 사용하는 모든 패턴 저장 논문을 참고해 작성했다. (가장 많이 사용하는 유형들)
 PATTERNS = [
     (LSL,    ReedsSheppPathType.LSL,           ['L','S','L'], 3),
     (LSR,    ReedsSheppPathType.LSR,           ['L','S','R'], 3),
@@ -191,49 +191,65 @@ def generate_local_course(lengths, modes, max_curvature, step_size):
     return px, py, pyaw, directions
 
 
-def interpolate(dist, length, mode, max_curvature, origin_x, origin_y, origin_yaw):
+def interpolate(dist, length, mode, max_curvature, ox, oy, origin_yaw):
     """
     특정 거리에서의 위치, 방향, 진행방향 계산
     """
     # 진행 방향 결정
     direction = 1 if length > 0.0 else -1
     
-    # X 모드 처리 (후진)
-    if mode.find('X') >= 0:
+    # X는 후진 모드
+    if mode == 'X':
         direction = -direction
+        # 직선 보간
+        x = ox + dist * math.cos(origin_yaw)
+        y = oy + dist * math.sin(origin_yaw)
+        yaw = origin_yaw
+        return x, y, yaw, direction
     
+    # 모드별 처리
     if mode == 'S':
         # 직선 보간
-        x = origin_x + dist * math.cos(origin_yaw)
-        y = origin_y + dist * math.sin(origin_yaw)
+        x = ox + dist * math.cos(origin_yaw)
+        y = oy + dist * math.sin(origin_yaw)
         yaw = origin_yaw
-    else:
-        # 곡선 보간
-        ldx = math.sin(abs(dist) * max_curvature) / max_curvature
         
-        if mode == 'L' or mode == 'LX':
-            ldy = (1.0 - math.cos(abs(dist) * max_curvature)) / max_curvature
-            yaw = pi_2_pi(origin_yaw + dist * max_curvature)
-        elif mode == 'R' or mode == 'RX':
-            ldy = (1.0 - math.cos(abs(dist) * max_curvature)) / (-max_curvature)
-            yaw = pi_2_pi(origin_yaw - dist * max_curvature)
-        else:
-            # 알 수 없는 모드에 대한 안전 처리
-            ldy = 0.0
-            yaw = origin_yaw
-
+    elif mode == 'L':
+        # 좌회전 보간
+        ldx = math.sin(abs(dist) * max_curvature) / max_curvature
+        ldy = (1.0 - math.cos(abs(dist) * max_curvature)) / max_curvature
+        yaw = pi_2_pi(origin_yaw + dist * max_curvature)
+        
         # 좌표계 변환 (로컬 → 전역)
         gdx = math.cos(-origin_yaw) * ldx + math.sin(-origin_yaw) * ldy
         gdy = -math.sin(-origin_yaw) * ldx + math.cos(-origin_yaw) * ldy
-
-        x = origin_x + gdx
-        y = origin_y + gdy
+        
+        x = ox + gdx
+        y = oy + gdy
+        
+    elif mode == 'R':
+        # 우회전 보간
+        ldx = math.sin(abs(dist) * max_curvature) / max_curvature
+        ldy = (1.0 - math.cos(abs(dist) * max_curvature)) / (-max_curvature)
+        yaw = pi_2_pi(origin_yaw - dist * max_curvature)
+        
+        # 좌표계 변환 (로컬 → 전역)
+        gdx = math.cos(-origin_yaw) * ldx + math.sin(-origin_yaw) * ldy
+        gdy = -math.sin(-origin_yaw) * ldx + math.cos(-origin_yaw) * ldy
+        
+        x = ox + gdx
+        y = oy + gdy
+        
+    else:
+        x = ox
+        y = oy
+        yaw = origin_yaw
 
     return x, y, yaw, direction
 
 
 def calc_all_paths(sx, sy, syaw, gx, gy, gyaw, max_curvature, step_size=STEP_SIZE):
-    """모든 가능한 경로 계산 (간소화된 버전)"""
+    """모든 가능한 경로 계산"""
     paths = []
 
     # 좌표 변환
