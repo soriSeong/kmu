@@ -15,7 +15,7 @@ class MotionPlanner(threading.Thread):
         self.period = 1.0 / rate
         self.shared = parent.shared
         self.plan = parent.shared.plan
-        self.ego = parent.shared.ego  # ego 정보 가져오기
+        self.ego = parent.shared.ego
         self.motion = Motion()
 
     def run(self):
