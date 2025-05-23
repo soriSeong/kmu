@@ -10,9 +10,9 @@ class Behavior():
         self.shared = sh
         self.ego = eg
         self.plan = pl
-
+        self.obs_decision()
         # 신호등에서 허용된 방향 정보 (빨강 초록 노랑)
-        self.pass_signal_list = []
+        self.traffic_light = "red"
 
     def go(self):
         self.plan.motion_decision = "go"
@@ -27,11 +27,21 @@ class Behavior():
         elif signal_state == "green":
             self.plan.behavior_decision = "go"
 
-    # 라바콘 회피 주행
-    # 라이다 관린 정보로 control해서 라바콘 회피피
-    def obs_small(self):
+    # obs 사이즈에 따라 obs small obs big 결정
+    def obs_decision(self):
+        obss = self.perception.obs_list
+        if len(obss) == 0:
+            self.plan.motion_decision = "go"
+            return
+
+        for obs in obss:
+            _, width, length = obs
+
+            if width > 1.5 or length > 2.0:  # 임계값 기준 # 시뮬 돌리면서 테스트 해야됨
+                self.plan.motion_decision = "obs_big"
+                return
+
+        # 모든 장애물이 작으면
         self.plan.motion_decision = "obs_small"
 
-    def obs_big(self):
-        # 차량 회피 optimal frenet planning
-        self.plan.motion_decision = "obs_big"
+

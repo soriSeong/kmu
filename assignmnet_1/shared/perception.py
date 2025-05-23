@@ -8,8 +8,10 @@ from time import sleep
 class Perception:
     def __init__(self):
         self.obs_list = []
+        self.traffic_light = ""
 
         rospy.Subscriber("/traffic_light",Int16,self.traffic_light_callback)
+        rospy.Subscriber("/perception/obstacles", MarkerArray, self.obs_callback)
 
         self.traffic_light_lock = threading.Lock()
     

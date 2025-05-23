@@ -39,7 +39,7 @@ class MotionPlanner(threading.Thread):
                 print("++++++++motion_planner+++++++++")
 
             sleep(self.period)
-    
+
     def generate_frenet_path(self):
         """장애물 회피용 Frenet 경로 생성"""
         ego = self.ego
@@ -68,13 +68,16 @@ class MotionPlanner(threading.Thread):
             return fplist[best_ind]
         except:
             print("좌측 회피 실패, 우측 시도")
-            fplist, best_ind = frenet_optimal_planning_right(
+            try:
+                fplist, best_ind = frenet_optimal_planning_right(
                 si=s0, si_d=ego.speed, si_dd=0,
                 sf_d=TARGET_SPEED, sf_dd=0,
                 di=d0, di_d=0, di_dd=0,
                 df_d=0, df_dd=0,
                 obs=obs, mapx=mapx, mapy=mapy, maps=maps,
                 opt_d=d0
-            )
-            return fplist[best_ind]
-
+                )
+                return fplist[best_ind]
+            except:
+                print("우측 회피 실패")
+                return None

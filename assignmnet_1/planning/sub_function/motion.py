@@ -11,7 +11,7 @@ class Motion():
         self.ego = eg
         self.controller = FrenetController()
         self.actuator_pub = rospy.Publisher('/xycar_motor', XycarMotor, queue_size=10)
-
+        
     def target_control(self, speed):
         self.ego.target_speed = int(speed)
 
