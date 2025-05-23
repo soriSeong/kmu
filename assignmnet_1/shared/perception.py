@@ -14,11 +14,8 @@ class Perception:
         # 라바콘 회피 주행에 사용
         self.middle_path = []
         rospy.Subscriber("/traffic_light",Bool,self.traffic_light_callback)
-        rospy.Subscriber("/line", MarkerArray, self.line_callback)
-
-        rospy.Subscriber("/obstacles", Bool, self.obs_callback)
+        rospy.Subscriber("/obs_detection", MarkerArray, self.obs_callback)
         rospy.Subscriber("/middle_path", MarkerArray, self.middle_path_callback)
-
         self.traffic_light_lock = threading.Lock()
     
     def traffic_light_callback(self, msg):
@@ -33,7 +30,7 @@ class Perception:
         self.traffic_light_lock.release()
 
     def obs_callback(self, msg):
-        self.obs_detection = msg.data
+        self.obs_detection = msg.markers
 
     def middle_path_callback(self, data):
         self.middle_path = []
@@ -41,10 +38,3 @@ class Perception:
             if marker.type == Marker.LINE_STRIP:
                 lane_points = [(p.x, p.y) for p in marker.points]
                 self.middle_path.append(lane_points)
-
-    def line_callback(self, data):
-        self.lines = []
-        for marker in data.markers:
-            if marker.type == Marker.LINE_STRIP:
-                lane_points = [(p.x, p.y) for p in marker.points]
-                self.lines.append(lane_points)

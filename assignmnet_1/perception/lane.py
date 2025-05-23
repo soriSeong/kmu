@@ -46,7 +46,7 @@ def start():
     global image 
     global pub_target_x, pub_lane_status, pub_lane_curvature 
 
-    rospy.init_node('lane_detector') 
+    rospy.init_node('lane_detector')
     
     pub_target_x = rospy.Publisher('/lane_detection/target_x', Int32, queue_size=1)
     pub_lane_status = rospy.Publisher('/lane_detection/lane_status', String, queue_size=1)

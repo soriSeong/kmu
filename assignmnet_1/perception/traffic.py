@@ -1,6 +1,4 @@
 #! /usr/bin/env python3
-
-
 import rospy
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Bool
@@ -51,7 +49,7 @@ class TrafficLightDetector:
                 cv2.imshow('ROI', roi_img)
                 cv2.imshow('Mask', mask)
                 cv2.imshow('Result', result)
-# 
+                
                 # Detect traffic light color
                 self.detect_traffic_light(result)
             

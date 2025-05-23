@@ -36,7 +36,7 @@ class Motion():
         """차량 회피 - Optimal Frenet + 제어 실행"""
         path = self.shared.local_path
         if not path or not hasattr(path, 'x') or len(path.x) < 2:
-            rospy.logwarn("경로 없음 또는 너무 짧음 → 정지")
+            rospy.logwarn("경로 없음 또는 너무 짧음")
             self.target_control(0)
             return
 
@@ -53,5 +53,5 @@ class Motion():
             for msg in msgs:
                 self.actuator_pub.publish(msg)
         else:
-            rospy.logwarn("유효한 제어 메시지 없음 → 정지")
+            rospy.logwarn("유효한 제어 메시지 없음")
             self.target_control(0)
