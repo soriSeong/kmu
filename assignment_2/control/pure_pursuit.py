@@ -190,6 +190,7 @@ def generate_path(s):
                 # 경로의 x, y 좌표, 각도, 방향을 저장하는 임시 리스트를 초기화한다.
                 x_rec, y_rec, yaw_rec, direct_rec = \
                     [x_rec[-1]], [y_rec[-1]], [yaw_rec[-1]], [-direct_rec[-1]]
+                    
     # 경로 리스트를 2차원 리스트에 추가한다.
     path_x.append(x_rec)
     path_y.append(y_rec)

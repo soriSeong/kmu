@@ -3,6 +3,6 @@ class Ego:
         self.x = 0
         self.y = 0
         self.yaw = 0
-        self.heading = 0 # yaw
+        self.heading = 0
         self.speed = 0
         self.steer = 0

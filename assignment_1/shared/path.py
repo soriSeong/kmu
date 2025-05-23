@@ -22,6 +22,3 @@ class Path:
 
         # 종료 시간
         self.t = []
-
-        # 종료 시간
-        self.t = []

@@ -191,9 +191,9 @@ def generate_local_course(lengths, modes, max_curvature, step_size):
     return px, py, pyaw, directions
 
 
-def interpolate(dist, length, mode, max_curvature, ox, oy, origin_yaw):
+def interpolate(dist, length, mode, max_curvature, origin_x, origin_y, origin_yaw):
     """
-    특정 거리에서의 위치, 방향, 진행방향 계산
+    논문 식 3.2를 사용한 보간 함수
     """
     # 진행 방향 결정
     direction = 1 if length > 0.0 else -1
@@ -201,48 +201,37 @@ def interpolate(dist, length, mode, max_curvature, ox, oy, origin_yaw):
     # X는 후진 모드
     if mode == 'X':
         direction = -direction
-        # 직선 보간
-        x = ox + dist * math.cos(origin_yaw)
-        y = oy + dist * math.sin(origin_yaw)
+        # 직선 후진
+        x = origin_x + dist * math.cos(origin_yaw)
+        y = origin_y + dist * math.sin(origin_yaw)
         yaw = origin_yaw
         return x, y, yaw, direction
     
-    # 모드별 처리
     if mode == 'S':
-        # 직선 보간
-        x = ox + dist * math.cos(origin_yaw)
-        y = oy + dist * math.sin(origin_yaw)
+        # 직선
+        x = origin_x + dist * math.cos(origin_yaw)
+        y = origin_y + dist * math.sin(origin_yaw)
         yaw = origin_yaw
         
     elif mode == 'L':
-        # 좌회전 보간
-        ldx = math.sin(abs(dist) * max_curvature) / max_curvature
-        ldy = (1.0 - math.cos(abs(dist) * max_curvature)) / max_curvature
-        yaw = pi_2_pi(origin_yaw + dist * max_curvature)
+        # 좌회전
+        t = dist * max_curvature  # 각도로 변환
         
-        # 좌표계 변환 (로컬 → 전역)
-        gdx = math.cos(-origin_yaw) * ldx + math.sin(-origin_yaw) * ldy
-        gdy = -math.sin(-origin_yaw) * ldx + math.cos(-origin_yaw) * ldy
-        
-        x = ox + gdx
-        y = oy + gdy
+        x = origin_x + math.sin(origin_yaw + t) - math.sin(origin_yaw)
+        y = origin_y - math.cos(origin_yaw + t) + math.cos(origin_yaw)
+        yaw = pi_2_pi(origin_yaw + t)
         
     elif mode == 'R':
-        # 우회전 보간
-        ldx = math.sin(abs(dist) * max_curvature) / max_curvature
-        ldy = (1.0 - math.cos(abs(dist) * max_curvature)) / (-max_curvature)
-        yaw = pi_2_pi(origin_yaw - dist * max_curvature)
+        # 우회전
+        t = dist * max_curvature  # 각도로 변환
         
-        # 좌표계 변환 (로컬 → 전역)
-        gdx = math.cos(-origin_yaw) * ldx + math.sin(-origin_yaw) * ldy
-        gdy = -math.sin(-origin_yaw) * ldx + math.cos(-origin_yaw) * ldy
-        
-        x = ox + gdx
-        y = oy + gdy
+        x = origin_x - math.sin(origin_yaw - t) + math.sin(origin_yaw)
+        y = origin_y + math.cos(origin_yaw - t) - math.cos(origin_yaw)
+        yaw = pi_2_pi(origin_yaw - t)
         
     else:
-        x = ox
-        y = oy
+        x = origin_x
+        y = origin_y
         yaw = origin_yaw
 
     return x, y, yaw, direction

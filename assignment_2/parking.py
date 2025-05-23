@@ -4,6 +4,7 @@ from geometry_msgs.msg import PoseStamped
 from xycar_msgs.msg import XycarMotor
 from planning.reeds_shepp_path import calc_optimal_path, pi_2_pi, STEP_SIZE
 from control.pure_pursuit import pure_pursuit, pid_control, PATH, Node, Nodes, C
+import tf
 
 class Parking:
     def __init__(self):
@@ -36,11 +37,11 @@ class Parking:
     def callback_apriltag(self, msg):
         x = msg.pose.position.x
         y = msg.pose.position.y
-
         q = msg.pose.orientation
-        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1 - 2 * (q.y**2 + q.z**2)
-        yaw = math.atan2(siny_cosp, cosy_cosp)
+
+        # EulerAngles = Quaternion -> yaw 변환
+        quaternion = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        yaw = quaternion[2]
 
         self.goal = (x, y, yaw)
 

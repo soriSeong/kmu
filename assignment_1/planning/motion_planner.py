@@ -1,8 +1,9 @@
 import threading
 from time import sleep
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped
+import tf
 from .sub_function.motion import Motion
-from numpy import dot
-from math import cos, sin
 
 from .optimal_frenet import (
     Vehicle, generate_reference_path_from_vehicle, calc_maps, get_frenet,
@@ -15,8 +16,9 @@ class MotionPlanner(threading.Thread):
         self.period = 1.0 / rate
         self.shared = parent.shared
         self.plan = parent.shared.plan
-        self.ego = parent.shared.ego
+        self.ego = parent.shared.ego 
         self.motion = Motion()
+        self.path_pub = rospy.Publisher("/frenet_path", Path, queue_size=1)
 
     def run(self):
         while True:
@@ -40,8 +42,31 @@ class MotionPlanner(threading.Thread):
 
             sleep(self.period)
 
+    def publish_frenet_path(self, frenet_path):
+        path_msg = Path()
+        path_msg.header.stamp = rospy.Time.now()
+        path_msg.header.frame_id = "map"
+
+        for x, y, yaw in zip(frenet_path.x, frenet_path.y, frenet_path.yaw):
+            pose = PoseStamped()
+            pose.header.stamp = rospy.Time.now()
+            pose.header.frame_id = "map"
+            pose.pose.position.x = x
+            pose.pose.position.y = y
+            pose.pose.position.z = 0.0
+
+            quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
+            pose.pose.orientation.x = quaternion[0]
+            pose.pose.orientation.y = quaternion[1]
+            pose.pose.orientation.z = quaternion[2]
+            pose.pose.orientation.w = quaternion[3]
+
+            path_msg.poses.append(pose)
+
+        self.path_pub.publish(path_msg)
+
     def generate_frenet_path(self):
-        """장애물 회피용 Frenet 경로 생성"""
+        """Frenet 경로 생성"""
         ego = self.ego
         vehicle = Vehicle(ego.x, ego.y, ego.yaw, ego.speed)
 
@@ -65,6 +90,7 @@ class MotionPlanner(threading.Thread):
                 obs=obs, mapx=mapx, mapy=mapy, maps=maps,
                 opt_d=d0
             )
+            self.publish_frenet_path(fplist[best_ind])
             return fplist[best_ind]
         except:
             print("좌측 회피 실패, 우측 시도")
@@ -77,6 +103,7 @@ class MotionPlanner(threading.Thread):
                 obs=obs, mapx=mapx, mapy=mapy, maps=maps,
                 opt_d=d0
                 )
+                self.publish_frenet_path(fplist[best_ind])
                 return fplist[best_ind]
             except:
                 print("우측 회피 실패")
