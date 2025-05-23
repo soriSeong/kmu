@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pygame
 import rospy
 from xycar_msgs.msg import XycarMotor
+import control.pure_pursuit as pl
 
 from planning.reeds_shepp_path import (
     calc_optimal_path,
