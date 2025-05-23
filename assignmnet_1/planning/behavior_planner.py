@@ -7,6 +7,10 @@ class BehaviorPlanner(threading.Thread):
     def __init__(self, parent, rate):
         super().__init__()
         self.period = 1.0 / rate
+        self.shared = parent.shared
+        self.perception = self.shared.perception
+        self.plan = self.shared.plan
+        self.behavior = Behavior()
         
     def run(self):
         while True:

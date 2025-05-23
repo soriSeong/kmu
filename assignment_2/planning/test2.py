@@ -13,7 +13,7 @@ from reeds_shepp_path import (
 step_size = STEP_SIZE
 
 # 공통 파라미터
-max_curvature = 1
+max_curvature = 0.7
 tol_xy = 0.1  # 위치 허용 오차 [m]
 tol_yaw = math.radians(5)  # yaw 허용 오차 [rad]
 max_dyaw = math.radians(45)
