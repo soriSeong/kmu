@@ -22,9 +22,7 @@ class Behavior():
 
     def traffic_light(self):
         signal_state = self.perception.traffic_light_state
-        if signal_state == "red":
-            self.plan.behavior_decision = "stop"
-        elif signal_state == "yellow": # 출발 시 신호등 정보에 따라야하기 때문에 정지 후 출발 = 정지임임
+        if signal_state == "red" or signal_state == "yellow":
             self.plan.behavior_decision = "stop"
         elif signal_state == "green":
             self.plan.behavior_decision = "go"
@@ -36,4 +34,4 @@ class Behavior():
 
     def obs_big(self):
         # 차량 회피 optimal frenet planning
-        pass
+        self.plan.motion_decision = "obs_big"

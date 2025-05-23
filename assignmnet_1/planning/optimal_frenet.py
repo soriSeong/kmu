@@ -518,3 +518,78 @@ def frenet_optimal_planning_right(si, si_d, si_dd, sf_d, sf_dd, di, di_d, di_dd,
         print("해결책이 없습니다!")
 
     return fplist, _opt_ind
+
+############### 테스팅 ##################
+
+import matplotlib.pyplot as plt
+
+def generate_obstacle(vehicle, dist_ahead=15):
+    obs_x = vehicle.x + dist_ahead * np.cos(vehicle.yaw)
+    obs_y = vehicle.y + dist_ahead * np.sin(vehicle.yaw)
+    return np.array([obs_x, obs_y])
+
+def test_obstacle_avoidance_left():
+    vehicle = Vehicle(initial_x=0, initial_y=0, initial_yaw=0, initial_v=TARGET_SPEED)
+    trajectory = []
+    obstacle_log = []
+
+    for step in range(50):
+        # 1. 차량 위치 갱신
+        vehicle.update(a=TARGET_SPEED, delta=0.0, direct=1)
+        trajectory.append((vehicle.x, vehicle.y))
+
+        # 2. 기준 경로 생성
+        mapx, mapy = generate_reference_path_from_vehicle(vehicle)
+        maps = calc_maps(mapx, mapy)
+
+        # 3. 현재 차량 위치 Frenet 변환
+        s0, d0 = get_frenet(vehicle.x, vehicle.y, mapx, mapy)
+
+        # 4. 장애물: 차량 기준 15m 앞
+        obs_s = s0 + 15.0
+        obs_d = 0.0
+        obs = np.array([[obs_s, obs_d]])
+        obs_x, obs_y, _ = get_cartesian(obs_s, obs_d, mapx, mapy, maps)
+        obstacle_log.append((obs_x, obs_y))
+
+        # 5. 회피 경로 생성 #left right로 바꾸면 오른쪽으로 잘 생성됨
+        fplist, best_ind = frenet_optimal_planning_left(
+            si=s0, si_d=vehicle.v, si_dd=0,
+            sf_d=TARGET_SPEED, sf_dd=0,
+            di=d0, di_d=0, di_dd=0,
+            df_d=0, df_dd=0,
+            obs=obs, mapx=mapx, mapy=mapy, maps=maps,
+            opt_d=d0
+        )
+
+        # 6. 경로 출력 및 시각화
+        print(f"[{step}] Vehicle Pos: ({vehicle.x:.2f}, {vehicle.y:.2f})")
+        if fplist:
+            opt_path = fplist[best_ind]
+            print(f" → Path End: ({opt_path.x[-1]:.2f}, {opt_path.y[-1]:.2f})")
+            plt.plot(mapx, mapy, 'k--', alpha=0.3)
+            plt.plot(opt_path.x, opt_path.y, 'b-', linewidth=2)
+        else:
+            print(" → 유효한 회피 경로 없음")
+
+        plt.scatter(vehicle.x, vehicle.y, color='red', label="Vehicle" if step == 0 else "")
+        plt.scatter(obs_x, obs_y, color='orange', marker='X', s=100, label="Obstacle" if step == 0 else "")
+
+        plt.axis("equal")
+        plt.title("Frenet Planning: Step-by-Step Obstacle Avoidance")
+        plt.xlabel("X [m]")
+        plt.ylabel("Y [m]")
+        plt.grid(True)
+        plt.legend()
+
+        plt.pause(0.3)  # 0.3초 간 멈춤
+    
+    plt.ioff()
+    plt.show()
+
+# 메인 실행
+def main():
+    test_obstacle_avoidance_left()
+
+if __name__ == "__main__":
+    main()

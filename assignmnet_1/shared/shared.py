@@ -30,10 +30,6 @@ class Shared:
         self.obstacles = []
         self.dangerous_obstacles = []
 
-        # for parallel parking
-        self.pp_final = False
-        self.parallel_local_control = False
-
         # for self control steer
         self.manual_steer = False
 
