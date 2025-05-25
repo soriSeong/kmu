@@ -41,7 +41,7 @@ class Motion():
         self.target_control(0)
      
     def go(self):
-        """차선 주행 - LaneDrivingController 사용"""
+        """차선 기반 주행"""
         rospy.loginfo("Motion: Lane following")
         try:
             # 차선 주행 컨트롤러 사용
@@ -66,8 +66,7 @@ class Motion():
             rospy.loginfo("Traffic light: GREEN")
             self.target_control(35)
         else:
-            rospy.logwarn("Traffic light: Unknown state")
-            self.stop()
+            self.target_control(35)
      
     def obs_small(self):
         """작은 장애물 회피 - 라바콘"""

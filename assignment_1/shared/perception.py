@@ -7,7 +7,7 @@ from time import sleep
 
 class Perception:
     def __init__(self):
-        self.traffic_light = False
+        self.traffic_light = True
         # 중앙 라인                
         self.lines = []
         self.obs_list = []
@@ -25,7 +25,7 @@ class Perception:
         elif msg.data == True:
             self.traffic_light = True
         else:
-            pass
+            self.traffic_light = True
 
         self.traffic_light_lock.release()
 
