@@ -1,9 +1,35 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import numpy as np
 from math import atan2, sin, cos, degrees, sqrt
 from std_msgs.msg import Header
 from xycar_msgs.msg import XycarMotor
 from numpy.linalg import norm
 import rospy
+
+# 파라미터 설정
+V_MAX = 100      # 최대 속도 [m/s]
+ACC_MAX = 100    # 최대 가속도 [m/s²]
+K_MAX = 100      # 최대 곡률 [1/m]
+
+TARGET_SPEED = 10  # 목표 속도 [m/s]
+LANE_WIDTH = 4     # 차선 폭 [m]
+
+COL_CHECK = 0.25   # 충돌 검사 거리 [m]
+
+MIN_T = 2    # 최소 종료 시간 [s]
+MAX_T = 2    # 최대 종료 시간 [s]
+DT_T = 0.5   # 종료 시간 간격 [s]
+DT = 0.05    # 업데이트 시간 간격 [s]
+
+# 비용 가중치
+K_J = 0.1    # 저크 가중치
+K_T = 0.1    # 시간 가중치
+K_D = 1.0    # 일관성 가중치
+K_V = 1.0    # 목표 속도 가중치
+K_LAT = 1.0  # 횡방향 가중치
+K_LON = 1.0  # 종방향 가중치
 
 LOOKAHEAD_OFFSET = 3
 

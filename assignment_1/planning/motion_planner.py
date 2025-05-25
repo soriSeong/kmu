@@ -4,7 +4,7 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import tf
 from .sub_function.motion import Motion
-
+from ..controller.lane_driving import LaneDrivingController
 from .optimal_frenet import *
 
 class MotionPlanner(threading.Thread):
@@ -17,11 +17,13 @@ class MotionPlanner(threading.Thread):
         self.motion = Motion()
         self.path_pub = rospy.Publisher("/frenet_path", Path, queue_size=1)
 
+        self.lane_controller = LaneDrivingController(self.shared)
+
     def run(self):
         while True:
             try:
                 if self.plan.motion_decision == "go":
-                    self.motion.go()
+                    self.lane_controller.lane_following_control()
                 
                 elif self.plan.motion_decision == "traffic_light":
                     self.motion.traffic_light()
