@@ -1,17 +1,18 @@
+#!/usr/bin/env python3
 import rospy
 from geometry_msgs.msg import PoseStamped, TwistStamped
 import threading
-from shared import Shared
-from mission_planner import MissionPlanner
-from behavior_planner import BehaviorPlanner  
-from motion_planner import MotionPlanner
 import tf
+from shared.shared import Shared
+from planning.mission_planner import MissionPlanner
+from planning.behavior_planner import BehaviorPlanner   
+from planning.motion_planner import MotionPlanner
 
 class VehicleStateUpdater:
     def __init__(self, shared):
         self.shared = shared
         
-        # 차량 상태 구독자
+        # 차량 상태 Subscriber
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_callback)
         rospy.Subscriber('/current_velocity', TwistStamped, self.velocity_callback)
         
@@ -36,7 +37,7 @@ def main():
     # 차량 상태 업데이터
     state_updater = VehicleStateUpdater(shared)
     
-    # 각 플래너 생성 및 시작
+    # planner 생성
     mission_planner = MissionPlanner(shared, rate=10)
     behavior_planner = BehaviorPlanner(shared, rate=20)
     motion_planner = MotionPlanner(shared, rate=20)
