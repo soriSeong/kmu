@@ -7,13 +7,13 @@ from time import sleep
 
 class Perception:
     def __init__(self):
-        self.obs_detection = False
-        self.traffic_light = False
+        self.traffic_light = True
         # 중앙 라인                
         self.lines = []
+        self.obs_list = []
         # 라바콘 회피 주행에 사용
         self.middle_path = []
-        rospy.Subscriber("/traffic_light",Bool,self.traffic_light_callback)
+        rospy.Subscriber("/traffic_sign",Bool,self.traffic_light_callback)
         rospy.Subscriber("/obs_detection", MarkerArray, self.obs_callback)
         rospy.Subscriber("/middle_path", MarkerArray, self.middle_path_callback)
         self.traffic_light_lock = threading.Lock()
@@ -25,12 +25,12 @@ class Perception:
         elif msg.data == True:
             self.traffic_light = True
         else:
-            pass
+            self.traffic_light = True
 
         self.traffic_light_lock.release()
 
     def obs_callback(self, msg):
-        self.obs_detection = msg.markers
+        self.obs_list = msg.markers
 
     def middle_path_callback(self, data):
         self.middle_path = []

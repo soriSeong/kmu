@@ -4,11 +4,10 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import tf
 from .sub_function.motion import Motion
+from controller.lane_driving import LaneDrivingController
+from .optimal_frenet import *
+import rospy
 
-from .optimal_frenet import (
-    Vehicle, generate_reference_path_from_vehicle, calc_maps, get_frenet,
-    frenet_optimal_planning_left, frenet_optimal_planning_right, TARGET_SPEED
-)
 
 class MotionPlanner(threading.Thread):
     def __init__(self, parent, rate):
@@ -17,8 +16,10 @@ class MotionPlanner(threading.Thread):
         self.shared = parent.shared
         self.plan = parent.shared.plan
         self.ego = parent.shared.ego 
-        self.motion = Motion()
+        self.motion = Motion(self.shared)
         self.path_pub = rospy.Publisher("/frenet_path", Path, queue_size=1)
+
+        self.lane_controller = LaneDrivingController(self.shared)
 
     def run(self):
         while True:
@@ -41,28 +42,36 @@ class MotionPlanner(threading.Thread):
                 print("++++++++motion_planner+++++++++")
 
             sleep(self.period)
-
+    
     def publish_frenet_path(self, frenet_path):
+        '''
+        Frenet 경로를 ROS 메시지로 퍼블리쉬
+        '''
         path_msg = Path()
         path_msg.header.stamp = rospy.Time.now()
         path_msg.header.frame_id = "map"
 
+        # (x, y, yaw) 좌표계를 PoseStamped 메시지로 변환
         for x, y, yaw in zip(frenet_path.x, frenet_path.y, frenet_path.yaw):
             pose = PoseStamped()
+            # 헤더를 현재시간, "map"으로 설정
             pose.header.stamp = rospy.Time.now()
             pose.header.frame_id = "map"
             pose.pose.position.x = x
             pose.pose.position.y = y
             pose.pose.position.z = 0.0
 
+            # yaw를 Quaternion으로 변환 tf를 사용한다. 
             quaternion = tf.transformations.quaternion_from_euler(0, 0, yaw)
             pose.pose.orientation.x = quaternion[0]
             pose.pose.orientation.y = quaternion[1]
             pose.pose.orientation.z = quaternion[2]
             pose.pose.orientation.w = quaternion[3]
 
+            # PoseStamped 메시지를 path_msg의 poses에 추가
             path_msg.poses.append(pose)
 
+        # ROS 메시지를 퍼블리쉬
         self.path_pub.publish(path_msg)
 
     def generate_frenet_path(self):

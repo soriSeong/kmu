@@ -8,6 +8,8 @@ from .traffic_light import Traffic_light
 class Shared:
     def __init__(self):
 
+        self.ego = Ego()
+
         # for perception
         self.perception = Perception()
 

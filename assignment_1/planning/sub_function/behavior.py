@@ -10,7 +10,6 @@ class Behavior():
         self.shared = sh
         self.ego = eg
         self.plan = pl
-        self.obs_decision()
         # 신호등에서 허용된 방향 정보 (빨강 초록 노랑)
         self.traffic_light = False
 
@@ -21,7 +20,17 @@ class Behavior():
         self.plan.motion_decision = "stop"
 
     def traffic_light(self):
-        if self.traffic_light == False:
-            self.plan.behavior_decision = "stop"
-        elif self.traffic_light == True:
-            self.plan.behavior_decision = "go"
+        traffic_state = self.perception.traffic_light
+
+        if traffic_state == False:
+            self.plan.motion_decision = "stop"
+        elif traffic_state == True:
+            self.plan.motion_decision = "go"
+        else:
+            self.plan.motion_decision = "go"
+
+    def obs_small(self):
+        self.plan.motion_decision = "obs_small"
+
+    def obs_big(self):
+        self.plan.motion_decision = "obs_big"
