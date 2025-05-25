@@ -48,9 +48,9 @@ def main():
     state_updater = VehicleStateUpdater(shared)
     
     # Planner 생성
-    mission_planner = MissionPlanner(parent, rate=2)
-    behavior_planner = BehaviorPlanner(parent, rate=2)
-    motion_planner = MotionPlanner(parent, rate=2)
+    mission_planner = MissionPlanner(parent, rate=20)
+    behavior_planner = BehaviorPlanner(parent, rate=20)
+    motion_planner = MotionPlanner(parent, rate=20)
     
     # daemon 설정해 스레드 종료 컨트롤 + c로
     mission_planner.daemon = True
