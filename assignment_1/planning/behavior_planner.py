@@ -10,8 +10,13 @@ class BehaviorPlanner(threading.Thread):
         self.shared = parent.shared
         self.perception = self.shared.perception
         self.plan = self.shared.plan
-        self.behavior = Behavior()
-        
+        self.behavior = Behavior(
+            sh=self.shared,
+            eg=self.shared.ego,
+            pc=self.perception,
+            pl=self.plan
+        )
+    
     def run(self):
         while True:
             try:

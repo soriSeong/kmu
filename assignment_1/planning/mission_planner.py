@@ -1,4 +1,5 @@
 import time
+import threading
 
 class MissionPlanner(threading.Thread):
     def __init__(self, parent, rate):

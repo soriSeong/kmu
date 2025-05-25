@@ -10,7 +10,6 @@ class Behavior():
         self.shared = sh
         self.ego = eg
         self.plan = pl
-        self.obs_decision()
         # 신호등에서 허용된 방향 정보 (빨강 초록 노랑)
         self.traffic_light = False
 

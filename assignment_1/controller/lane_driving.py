@@ -11,8 +11,8 @@ import rospy
 import tf
 
 # 파라미터 설정
-TARGET_SPEED = 10  # 목표 속도 [m/s]
-LANE_WIDTH = 4     # 차선 폭 [m]
+TARGET_SPEED = 35  # 목표 속도
+LANE_WIDTH = 4     # 차선 폭
 
 # 비용 가중치
 K_LATERAL = 2.0    # 횡방향 오차 가중치

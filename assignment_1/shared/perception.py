@@ -11,9 +11,10 @@ class Perception:
         self.traffic_light = False
         # 중앙 라인                
         self.lines = []
+        self.obs_list = []
         # 라바콘 회피 주행에 사용
         self.middle_path = []
-        rospy.Subscriber("/traffic_light",Bool,self.traffic_light_callback)
+        rospy.Subscriber("/traffic_sign",Bool,self.traffic_light_callback)
         rospy.Subscriber("/obs_detection", MarkerArray, self.obs_callback)
         rospy.Subscriber("/middle_path", MarkerArray, self.middle_path_callback)
         self.traffic_light_lock = threading.Lock()
