@@ -20,7 +20,17 @@ class Behavior():
         self.plan.motion_decision = "stop"
 
     def traffic_light(self):
-        if self.traffic_light == False:
+        traffic_state = self.perception.traffic_light
+
+        if traffic_state == False:
             self.plan.behavior_decision = "stop"
-        elif self.traffic_light == True:
+        elif traffic_state == True:
             self.plan.behavior_decision = "go"
+        else:
+            self.plan.motion_decision = "stop"
+
+    def obs_small(self):
+        self.plan.behavior_decision = "obs_small"
+
+    def obs_big(self):
+        self.plan.behavior_decision = "obs_big"

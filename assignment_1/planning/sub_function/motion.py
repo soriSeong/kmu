@@ -46,6 +46,8 @@ class Motion():
         try:
             # 차선 주행 컨트롤러 사용
             motor_cmd = self.lane_controller.lane_following_control()
+            self.actuator_pub.publish(motor_cmd)
+            rospy.sleep(0.1)
             
         except Exception as e:
             rospy.logerr(f"Lane following error: {e}")
@@ -87,17 +89,15 @@ class Motion():
 
     def obs_big(self):
         """차량 회피 - Optimal Frenet + 제어 실행"""
-        rospy.loginfo("Motion: Big obstacle (vehicle) avoidance")
         
         # Frenet 경로가 생성되었는지 확인
         path = self.shared.local_path
         if not path or not hasattr(path, 'x') or len(path.x) < 2:
-            rospy.logwarn("No valid Frenet path available")
+            rospy.logwarn("No valid Frenet path")
             self.target_control(35)
             return
 
         try:
-            # Frenet 컨트롤러로 경로 추종
             msgs = self.frenet_controller.follow_frenet_path(
                 path,
                 ego_x=self.ego.x if self.ego else 0,

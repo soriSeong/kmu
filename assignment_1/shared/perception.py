@@ -7,7 +7,6 @@ from time import sleep
 
 class Perception:
     def __init__(self):
-        self.obs_detection = False
         self.traffic_light = False
         # 중앙 라인                
         self.lines = []
@@ -31,7 +30,7 @@ class Perception:
         self.traffic_light_lock.release()
 
     def obs_callback(self, msg):
-        self.obs_detection = msg.markers
+        self.obs_list = msg.markers
 
     def middle_path_callback(self, data):
         self.middle_path = []
