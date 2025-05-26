@@ -1,0 +1,9 @@
+<launch>
+    <!-- LeGO-LOAM -->
+    <node pkg="pcl_cpp_tutorial" type="practics_dynamic_scale" name="practics_dynamic_scale" output="screen">
+        <param name="frame_id" value="os_sensor"/>
+    </node>
+
+    <!-- RViz -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find pcl_cpp_tutorial)/rviz/cone.rviz" output="screen"/>
+</launch>
