@@ -11,11 +11,11 @@ import rospy
 import tf
 
 # 파라미터 설정
-TARGET_SPEED = 35  # 목표 속도
+TARGET_SPEED = 25  # 목표 속도
 
 class LateralPID:
     """차선 주행용 횡방향 PID 제어기"""
-    def __init__(self, kp=1.5, ki=0.02, kd=0.25, dt=0.05):  # 보수적 게인
+    def __init__(self, kp=1.9, ki=0.03, kd=0.4, dt=0.05):  # 보수적 게인
         self.K_P = kp
         self.K_I = ki
         self.K_D = kd
@@ -56,7 +56,7 @@ class LateralPID:
                      self.K_D * derivative_error)
         
         self.pre_error = lateral_error
-        return np.clip(correction, -20, 20)  # 조향각 제한
+        return np.clip(correction, -20, 20)  # 스케일카 물리적 한계
 
 class SpeedPID:
     """속도 제어용 PID"""
@@ -87,9 +87,8 @@ class LaneDrivingController:
         self.ego = shared.ego if hasattr(shared, 'ego') else None
         self.perception = shared.perception
         
-        # PID 튜닝 반영 (더 공격적)
-        self.lateral_pid = LateralPID(kp=1.5, ki=0.03, kd=0.3)
-        self.speed_pid = SpeedPID(kp=1.0, ki=0.05, kd=0.1)
+        self.lateral_pid = LateralPID(kp=1.9, ki=0.03, kd=0.4)
+        self.speed_pid = SpeedPID(kp=1.5, ki=0.05, kd=0.2)
         self.steer_ratio = steer_ratio
         
         self.prev_steer = 0.0
@@ -140,12 +139,19 @@ class LaneDrivingController:
             self.ego.speed = msg.twist.linear.x
 
     def calculate_target_speed(self):
+        """곡률에 따른 목표 속도 계산 - 적절한 기준값으로 수정"""
         base_speed = TARGET_SPEED
-        if abs(self.lane_curvature) > 100:
-            return base_speed * 0.7
-        elif abs(self.lane_curvature) > 50:
+        curvature_abs = abs(self.lane_curvature)
+        
+        if curvature_abs > 200000:      # 매우 급한 커브
+            return base_speed * 0.6
+        elif curvature_abs > 100000:    # 급한 커브  
+            return base_speed * 0.75
+        elif curvature_abs > 50000:     # 중간 커브
             return base_speed * 0.85
-        else:
+        elif curvature_abs > 20000:     # 완만한 커브
+            return base_speed * 0.95
+        else:                           # 직선 구간
             return base_speed
 
     def smooth_steering(self, new_steer):
@@ -154,9 +160,10 @@ class LaneDrivingController:
             self.steer_history.pop(0)
         smoothed = sum(self.steer_history) / len(self.steer_history)
 
-        # 곡률 기반 최대 변화 허용
-        max_change = 5.0 + abs(self.lane_curvature / 80.0)
-        max_change = np.clip(max_change, 5.0, 10.0)
+        # 곡률 기반 최대 변화 허용 - 급커브에서 더 빠른 반응
+        max_change = 8.0 + abs(self.lane_curvature / 50000.0)
+        # 상한값 증가
+        max_change = np.clip(max_change, 8.0, 20.0)
 
         if abs(smoothed - self.prev_steer) > max_change:
             smoothed = self.prev_steer + max_change * np.sign(smoothed - self.prev_steer)
@@ -177,11 +184,21 @@ class LaneDrivingController:
             rospy.logwarn_throttle(2.0, "Lane lost - maintaining straight course")
             steering_angle = self.prev_steer * 0.9
             target_speed *= 0.8
+            curvature_gain = 0.0
+            pid_steer = 0.0
         else:
-            steering_angle = self.lateral_pid.run(self.target_x, 320, 640)
+            # PID 기본 조향각 계산
+            pid_steer = self.lateral_pid.run(self.target_x, 320, 640)
+            steering_angle = pid_steer
 
-            # 곡률 기반 조향 보정 추가
-            curvature_gain = np.clip(self.lane_curvature / 100.0, -1.5, 1.5)
+            # 곡률 기반 조향 보정 - 매우 급한 커브 대응
+            if abs(self.lane_curvature) > 500000:  # 매우 급한 커브
+                curvature_gain = np.clip(self.lane_curvature / 50000.0, -18.0, 18.0)
+            elif abs(self.lane_curvature) > 100000:  # 급한 커브
+                curvature_gain = np.clip(self.lane_curvature / 30000.0, -12.0, 12.0)
+            else:  # 일반 커브
+                curvature_gain = np.clip(self.lane_curvature / 15000.0, -8.0, 8.0)
+            
             steering_angle += curvature_gain
 
             # 차선 상태별 추가 조정
@@ -191,7 +208,7 @@ class LaneDrivingController:
                 steering_angle += 2.0
 
         final_steer = self.smooth_steering(steering_angle)
-        final_steer = np.clip(final_steer, -25, 25)
+        final_steer = np.clip(final_steer, -20, 20)  # 스케일카 물리적 한계
 
         throttle = self.speed_pid.run(target_speed, ego_speed)
 
@@ -205,9 +222,10 @@ class LaneDrivingController:
         self.prev_steer = final_steer
 
         pixel_error = self.target_x - 320
-        rospy.loginfo_throttle(2.0, 
+        rospy.loginfo_throttle(1.0, 
             f"Lane: {self.lane_status} | Error: {pixel_error:+4d}px | "
-            f"Steer: {final_steer:+5.1f}° | Speed: {throttle:.0f}")
+            f"PID: {pid_steer:+5.1f}° | Curve: {curvature_gain:+5.1f}° | "
+            f"Final: {final_steer:+5.1f}° | Curvature: {self.lane_curvature:.0f}")
         
         return motor_cmd
 
