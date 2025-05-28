@@ -378,7 +378,7 @@ void Clustering::clusterCone(const pcl::PointCloud<PointType>::Ptr& input_pointC
     tree->setInputCloud(input_pointCloud);
     
     // 클러스터 크기 설정(콘 크기에 맞춘게 아니라 자동차 크기에 맞추서 조정)
-    coneClusterExtractor.setClusterTolerance(0.2);
+    coneClusterExtractor.setClusterTolerance(0.15);
     coneClusterExtractor.setMinClusterSize(2);
     coneClusterExtractor.setMaxClusterSize(80);
 
@@ -1654,4 +1654,3 @@ void Clustering::identifyLRcone(const pcl::PointCloud<PointType>::Ptr& input_poi
     }
 }
 */
-

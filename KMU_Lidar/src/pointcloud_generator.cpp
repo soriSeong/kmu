@@ -549,4 +549,3 @@ void PointCloudGenerator::getSectorROICloud(const pcl::PointCloud<PointType>::Pt
         }
     }
 }
-
