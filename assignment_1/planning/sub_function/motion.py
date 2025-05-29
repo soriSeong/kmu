@@ -72,19 +72,37 @@ class Motion():
         """작은 장애물 회피 - 라바콘"""
         rospy.loginfo("Motion: Small obstacle avoidance")
         
+        # cone_controller 객체가 이미 생성되었는지 확인 (성능 최적화)
+        # Motion 클래스는 한 번 생성되고 계속 재사용되므로
+        # 매번 새로운 controller를 생성하지 않고 기존 것을 재사용
+        if not hasattr(self, 'cone_controller'):
+            try:
+                from controller.cone_driving import ConeDrivingController
+                self.cone_controller = ConeDrivingController(self.shared)
+            except ImportError:
+                rospy.logwarn("ConeDrivingController not found, using basic control")
+                self.target_control(15)
+                return
+
+        # middle_path가 있으면 콘 주행 컨트롤러 사용
+        #빈 리스트는 False, 데이터가 있으면 True
         if hasattr(self.perception, 'middle_path') and self.perception.middle_path:
             try:
-                # middle path를 따라 주행
-                self.target_control(15)  # 감속 주행
-                rospy.loginfo("Following middle path for obstacle avoidance")
-                
+                # 콘 주행 제어
+                motor_cmd = self.cone_controller.follow_cone_path()
+                if motor_cmd:
+                    self.actuator_pub.publish(motor_cmd)
+                    rospy.loginfo("Following cone path")
+                else:
+                    self.target_control(15)  # 기본 감속 주행
+                    
             except Exception as e:
-                rospy.logerr(f"Middle path following error: {e}")
+                rospy.logerr(f"Cone path following error: {e}")
                 self.target_control(10)  # 더 감속
         else:
-            # middle path가 없으면 에러메시지, 속도 감속속
-            rospy.logwarn("No middle path available, using simple speed control")
-            self.target_control(10)
+            # middle path가 없으면 감속 주행 (라바콘 회피 상황에서)
+            rospy.logwarn("No middle path available, using reduced speed")
+            self.target_control(15)
 
     def obs_big(self):
         """차량 회피 - Optimal Frenet + 제어 실행"""

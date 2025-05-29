@@ -10,7 +10,7 @@ class Perception:
         self.traffic_light = True
         # 중앙 라인                
         self.lines = []
-        # 라바콘 회피 주행에 사용
+        # 라바콘 회피 주행에 사용 - 단순한 좌표 리스트로 변경
         self.middle_path = []
         # 라바콘 감지
         self.cone_list = []
@@ -45,9 +45,17 @@ class Perception:
         rospy.logdebug(f"Vehicle detected: {len(self.vehicle_list)}개")
 
     def middle_path_callback(self, data):
-        """중앙 경로 콜백 (라바콘 회피용)"""
+        """중앙 경로 콜백 - MarkerArray에서 좌표 추출"""
         self.middle_path = []
+        
         for marker in data.markers:
-            if marker.type == Marker.LINE_STRIP:
-                lane_points = [(p.x, p.y) for p in marker.points]
-                self.middle_path.append(lane_points)
+            # SPHERE 타입 마커에서 position 좌표 추출
+            if marker.type == Marker.SPHERE:
+                x = marker.pose.position.x
+                y = marker.pose.position.y
+                self.middle_path.append((x, y))
+
+        # 차량에 가까운순으로 정렬 
+        if self.middle_path:
+            self.middle_path.sort(key=lambda point: hypot(point[0], point[1]))
+            rospy.logdebug(f"Middle path updated: {len(self.middle_path)} points")

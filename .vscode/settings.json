@@ -1,3 +1,18 @@
 {
-    "cmake.sourceDirectory": "C:/Users/xorkd/OneDrive/파일모음/KMU_2025_Pre_Contest/ROS-TCP-Endpoint"
+    "cmake.sourceDirectory": "C:/Users/xorkd/OneDrive/파일모음/KMU_2025_Pre_Contest/ROS-TCP-Endpoint",
+    "files.associations": {
+        "array": "cpp",
+        "chrono": "cpp",
+        "deque": "cpp",
+        "format": "cpp",
+        "forward_list": "cpp",
+        "initializer_list": "cpp",
+        "list": "cpp",
+        "ranges": "cpp",
+        "span": "cpp",
+        "vector": "cpp",
+        "xhash": "cpp",
+        "xstring": "cpp",
+        "xutility": "cpp"
+    }
 }
