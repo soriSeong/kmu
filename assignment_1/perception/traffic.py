@@ -71,20 +71,32 @@ class TrafficLightDetector:
         lower_green = np.array([40, 158, 181])
         upper_green = np.array([90, 255, 255])
 
+        # Yellow color range
+        lower_yellow = np.array([15, 158, 181])
+        upper_yellow = np.array([35, 255, 255])
+
         red_mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
         red_mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
         red_mask = cv2.bitwise_or(red_mask1, red_mask2)
         green_mask = cv2.inRange(hsv, lower_green, upper_green)
+        yellow_mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
         if cv2.countNonZero(red_mask) > 0:
-            rospy.loginfo("Red light detected")
+            rospy.loginfo("🔴 Red light detected")
             self.traffic_pub.publish(Bool(data=False))
+
         elif cv2.countNonZero(green_mask) > 0:
-            rospy.loginfo("Green light detected")
+            rospy.loginfo("🟢 Green light detected")
             self.traffic_pub.publish(Bool(data=True))
+
+        elif cv2.countNonZero(yellow_mask) > 0:
+            rospy.loginfo("🟡 Yellow light detected")
+            self.traffic_pub.publish(Bool(data=False))  # Yellow → 기본적으로 정지 처리
+
         else:
-            # rospy.loginfo("No clear traffic light detected")
-            self.traffic_pub.publish(Bool(data=False))
+            rospy.logwarn("⚠️ No clear traffic light detected")
+            self.traffic_pub.publish(Bool(data=True))
+
 
 if __name__ == '__main__':
     rospy.init_node('traffic_light_detector', anonymous=True)
