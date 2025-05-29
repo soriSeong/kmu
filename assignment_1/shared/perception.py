@@ -18,9 +18,9 @@ class Perception:
         self.vehicle_list = []
         rospy.Subscriber("/traffic_sign",Bool,self.traffic_light_callback)
 
-        rospy.Subscriber("/middle_path", MarkerArray, self.middle_path_callback)
-        rospy.Subscriber("/cone_detection", MarkerArray, self.cone_callback)
-        rospy.Subscriber("/vehicle_detection", MarkerArray, self.vehicle_callback)
+        rospy.Subscriber("/mid_line_marker_array", MarkerArray, self.middle_path_callback)
+        rospy.Subscriber("/obs_small", MarkerArray, self.cone_callback)
+        rospy.Subscriber("/static_markers", MarkerArray, self.vehicle_callback)
         self.traffic_light_lock = threading.Lock()
     
     def traffic_light_callback(self, msg):
