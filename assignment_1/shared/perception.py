@@ -49,8 +49,8 @@ class Perception:
         self.middle_path = []
         
         for marker in data.markers:
-            # SPHERE 타입 마커에서 position 좌표 추출
-            if marker.type == Marker.SPHERE:
-                x = marker.pose.position.x
-                y = marker.pose.position.y
-                self.middle_path.append((x, y))
+            x = marker.pose.position.x
+            y = marker.pose.position.y
+            self.middle_path.append((x, y))
+
+
