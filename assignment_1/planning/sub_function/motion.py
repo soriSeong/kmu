@@ -3,48 +3,54 @@ from xycar_msgs.msg import XycarMotor
 from std_msgs.msg import Header
 from controller.frenet_controller import FrenetController
 from controller.lane_driving import LaneDrivingController
+from controller.cone_driving import ConeDrivingController
 
-class Motion():
+class Motion:
     def __init__(self, shared):
         self.shared = shared
         self.plan = shared.plan
         self.ego = shared.ego
         self.perception = shared.perception
         
-        # 컨트롤러 초기화
+        # 상대좌표 기준 컨트롤러들 초기화
         self.frenet_controller = FrenetController()
         self.lane_controller = LaneDrivingController(shared)
+        self.cone_controller = ConeDrivingController(shared)
         
         # 모터 제어 퍼블리셔
         self.actuator_pub = rospy.Publisher('/xycar_motor', XycarMotor, queue_size=10)
         
-        rospy.loginfo("Motion controller initialized")
-            
-    def target_control(self, speed):
-        """기본 속도 제어"""
-        if self.ego:
-            self.ego.target_speed = int(speed)
-        
-        # XycarMotor 메시지 생성 및 발행
+        rospy.loginfo("Motion controller initialized (Relative Coordinate System)")
+    
+    def create_motor_command(self, angle, speed):
+        """모터 명령 생성 유틸리티"""
         motor_msg = XycarMotor()
         motor_msg.header = Header()
         motor_msg.header.stamp = rospy.Time.now()
         motor_msg.header.frame_id = "map"
-        motor_msg.angle = 0  # 직진
-        motor_msg.speed = speed
+        motor_msg.angle = int(angle)
+        motor_msg.speed = int(speed)
+        return motor_msg
+            
+    def target_control(self, speed):
+        """기본 속도 제어 (직진)"""
+        if self.ego:
+            self.ego.target_speed = int(speed)
         
+        motor_msg = self.create_motor_command(0, speed)  # 직진
         self.actuator_pub.publish(motor_msg)
      
     def stop(self):
         """정지"""
         rospy.loginfo("Motion: Stop")
-        self.target_control(0)
+        motor_msg = self.create_motor_command(0, 0)
+        self.actuator_pub.publish(motor_msg)
      
     def go(self):
-        """차선 기반 주행"""
-        rospy.loginfo("Motion: Lane following")
+        """차선 기반 주행 (상대좌표 기준)"""
+        rospy.loginfo("Motion: Lane following (Relative Coordinate)")
         try:
-            # 차선 주행 컨트롤러 사용
+            # 상대좌표 기준 차선 주행 컨트롤러 사용
             motor_cmd = self.lane_controller.lane_following_control()
             self.actuator_pub.publish(motor_cmd)
             rospy.sleep(0.1)
@@ -52,7 +58,7 @@ class Motion():
         except Exception as e:
             rospy.logerr(f"Lane following error: {e}")
             # 오류 시 비상 정지
-            self.lane_controller.emergency_stop()
+            self.emergency_stop()
      
     def traffic_light(self):
         """신호등 제어"""
@@ -69,43 +75,28 @@ class Motion():
             self.target_control(35)
      
     def obs_small(self):
-        """작은 장애물 회피 - 라바콘"""
-        rospy.loginfo("Motion: Small obstacle avoidance")
+        """작은 장애물 회피 - 라바콘 (상대좌표 기준)"""
+        rospy.loginfo("Motion: Small obstacle avoidance (Relative Coordinate)")
         
-        # cone_controller 객체가 이미 생성되었는지 확인 (성능 최적화)
-        # Motion 클래스는 한 번 생성되고 계속 재사용되므로
-        # 매번 새로운 controller를 생성하지 않고 기존 것을 재사용
-        if not hasattr(self, 'cone_controller'):
-            try:
-                from controller.cone_driving import ConeDrivingController
-                self.cone_controller = ConeDrivingController(self.shared)
-            except ImportError:
-                rospy.logwarn("ConeDrivingController not found, using basic control")
-                self.target_control(15)
-                return
-
-        # middle_path가 있으면 콘 주행 컨트롤러 사용
-        #빈 리스트는 False, 데이터가 있으면 True
-        if hasattr(self.perception, 'middle_path') and self.perception.middle_path:
-            try:
-                # 콘 주행 제어
-                motor_cmd = self.cone_controller.follow_cone_path()
-                if motor_cmd:
-                    self.actuator_pub.publish(motor_cmd)
-                    rospy.loginfo("Following cone path")
-                else:
-                    self.target_control(15)  # 기본 감속 주행
-                    
-            except Exception as e:
-                rospy.logerr(f"Cone path following error: {e}")
-                self.target_control(10)  # 더 감속
-        else:
-            # middle path가 없으면 감속 주행 (라바콘 회피 상황에서)
-            rospy.logwarn("No middle path available, using reduced speed")
-            self.target_control(15)
+        try:
+            # 상대좌표 기준 콘 드라이빙 컨트롤러 사용
+            motor_cmd = self.cone_controller.follow_cone_path()
+            
+            if motor_cmd:
+                self.actuator_pub.publish(motor_cmd)
+                rospy.loginfo("Cone path following command sent")
+            else:
+                # 백업: middle path가 없으면 단순 감속
+                rospy.logwarn("No cone path available, using simple speed control")
+                self.target_control(15)  # 감속 주행
+                
+        except Exception as e:
+            rospy.logerr(f"Cone driving error: {e}")
+            self.target_control(10)  # 더 감속
 
     def obs_big(self):
-        """차량 회피 - Optimal Frenet + 제어 실행"""
+        """차량 회피 - Optimal Frenet (상대좌표 기준)"""
+        rospy.loginfo("Motion: Large obstacle avoidance (Relative Coordinate)")
         
         # Frenet 경로가 생성되었는지 확인
         path = self.shared.local_path
@@ -115,57 +106,98 @@ class Motion():
             return
 
         try:
-            msgs = self.frenet_controller.follow_frenet_path(
+            # 현재 차량 상태
+            ego_x = self.ego.x if self.ego else 0
+            ego_y = self.ego.y if self.ego else 0
+            ego_yaw = self.ego.yaw if self.ego else 0
+            ego_speed = self.ego.speed if self.ego else 5
+            ego_steer = self.ego.steer if self.ego else 0
+            
+            # 상대좌표 기준 Frenet 경로 추종
+            motor_commands = self.frenet_controller.follow_frenet_path(
                 path,
-                ego_x=self.ego.x if self.ego else 0,
-                ego_y=self.ego.y if self.ego else 0,
-                yaw=self.ego.yaw if self.ego else 0,
-                speed=self.ego.speed if self.ego else 5,
-                steer_prev=self.ego.steer if self.ego else 0
+                ego_x=ego_x,
+                ego_y=ego_y,
+                yaw=ego_yaw,
+                speed=ego_speed,
+                steer_prev=ego_steer
             )
 
-            if msgs:
-                # 생성된 제어 메시지들을 순차적으로 발행
-                for msg in msgs:
-                    self.actuator_pub.publish(msg)
+            if motor_commands:
+                # 생성된 제어 명령들을 순차적으로 발행
+                for cmd in motor_commands:
+                    self.actuator_pub.publish(cmd)
                     rospy.sleep(0.05)  # 짧은 간격으로 발행
                     
-                rospy.loginfo("Frenet path following commands sent")
+                rospy.loginfo("Frenet path following commands sent (Relative)")
             else:
                 rospy.logwarn("No valid control messages from Frenet controller")
-                self.target_control(0)  # 정지
+                self.stop()  # 정지
                 
         except Exception as e:
             rospy.logerr(f"Frenet path following error: {e}")
-            self.target_control(0)  # 오류 시 정지
+            self.stop()  # 오류 시 정지
 
     def emergency_stop(self):
         """비상 정지"""
         rospy.logwarn("Emergency stop activated!")
-        motor_msg = XycarMotor()
-        motor_msg.header = Header()
-        motor_msg.header.stamp = rospy.Time.now()
-        motor_msg.header.frame_id = "map"
-        motor_msg.angle = 0
-        motor_msg.speed = -10  # 정지
+        
+        # 비상 정지 메시지 (브레이크)
+        emergency_msg = self.create_motor_command(0, -10)
         
         # 여러 번 발행하여 확실히 정지
         for _ in range(5):
-            self.actuator_pub.publish(motor_msg)
+            self.actuator_pub.publish(emergency_msg)
             rospy.sleep(0.1)
         
         # 완전 정지
-        motor_msg.speed = 0
-        self.actuator_pub.publish(motor_msg)
+        final_stop = self.create_motor_command(0, 0)
+        self.actuator_pub.publish(final_stop)
 
     def get_current_state(self):
-        """현재 상태 반환"""
+        """현재 상태 반환 (상대좌표 기준)"""
         if self.ego:
             return {
-                'position': (self.ego.x, self.ego.y),
+                'coordinate_system': 'relative',
+                'position': (self.ego.x, self.ego.y),  # 절대좌표 (참조용)
                 'yaw': self.ego.yaw,
                 'speed': self.ego.speed,
-                'steer': self.ego.steer
+                'steer': self.ego.steer,
+                'controllers': {
+                    'lane_status': self.lane_controller.get_status_relative(),
+                    'cone_status': self.cone_controller.get_status(),
+                    'frenet_active': hasattr(self.shared, 'local_path') and self.shared.local_path is not None
+                }
             }
         else:
-            return None
+            return {
+                'coordinate_system': 'relative',
+                'error': 'No ego vehicle state available'
+            }
+
+    def reset_all_controllers(self):
+        """모든 제어기 상태 초기화"""
+        rospy.loginfo("Resetting all controllers to relative coordinate system")
+        
+        # 각 컨트롤러 리셋
+        if hasattr(self.lane_controller, 'reset_controller'):
+            self.lane_controller.reset_controller()
+        
+        if hasattr(self.frenet_controller, 'reset'):
+            self.frenet_controller.reset()
+        
+        rospy.loginfo("All controllers reset complete")
+
+    def get_active_controller(self):
+        if self.plan.motion_decision == "go":
+            return "lane_controller"
+        elif self.plan.motion_decision == "obs_small":
+            return "cone_controller"
+        elif self.plan.motion_decision == "obs_big":
+            return "frenet_controller"
+        elif self.plan.motion_decision == "traffic_light":
+            return "traffic_light_controller"
+        elif self.plan.motion_decision == "stop":
+            return "stop_controller"
+        else:
+            return "unknown"
