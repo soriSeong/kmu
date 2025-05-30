@@ -244,7 +244,7 @@ class LaneDrivingController:
                 base_gain = self.lane_curvature / 300000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
                 curvature_gain = np.clip(curvature_gain, -14.0, 14.0)
-            elif self.lane_curvature > 150000:  # 일반 커브 # 100000일떄 잘 되긴함
+            elif self.lane_curvature > 100000:  # 일반 커브
                 base_gain = self.lane_curvature / 150000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
                 curvature_gain = np.clip(curvature_gain, -8.0, 8.0)

@@ -66,8 +66,8 @@ class ConeDrivingController:
         target_x, target_y = target_point
 
         lookahead_distance = (target_x**2 + target_y**2) ** 0.5
-        if lookahead_distance == 0:
-            return 0.0
+        if lookahead_distance < 0.1:  # 너무 작으면 최소값 설정
+            lookahead_distance = 0.1
 
         steer_rad = atan2(2.0 * 1.0 * target_y, lookahead_distance**2)
         steer_deg = degrees(steer_rad)
