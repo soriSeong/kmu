@@ -192,8 +192,18 @@ void PointCloudGenerator::getBox(const pcl::PointCloud<PointType>::Ptr& input,
 {
     float min_x = center.first - width / 2.0f;
     float max_x = center.first + width / 2.0f;
-    float min_y = center.second - height / 2.0f;
-    float max_y = center.second + height / 2.0f;
+    float min_y, max_y;
+
+    // center의 y값 기준으로 L/R 판단
+    if (center.second > 0) {
+        // Lcone: y > 1.0만 포함
+        min_y = std::max(center.second - height / 2.0f, 1.0f);
+        max_y = center.second + height / 2.0f;
+    } else {
+        // Rcone: y < -1.0만 포함
+        min_y = center.second - height / 2.0f;
+        max_y = std::min(center.second + height / 2.0f, -1.0f);
+    }
 
     output->clear();
     for (const auto& pt : input->points) {
