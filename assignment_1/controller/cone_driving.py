@@ -45,12 +45,12 @@ class ConeDrivingController:
             steer_angle = self.pure_pursuit_from_relative_point(target_point)
             
             # 속도 계산 (곡률에 따라 조정)
-            target_speed = 7
+            target_speed = 5    
             
             
             
             # 모터 명령 생성
-            return self.create_motor_command(steer_angle*3.6, target_speed)
+            return self.create_motor_command(steer_angle*3.5, target_speed)
 
         except Exception as e:
             rospy.logerr(f"Cone path following error: {e}")
