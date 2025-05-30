@@ -11,7 +11,7 @@ import rospy
 import tf
 
 # 파라미터 설정
-TARGET_SPEED = 30  # 목표 속도
+TARGET_SPEED = 35  # 목표 속도
 IMAGE_WIDTH = 640  # 이미지 너비
 IMAGE_CENTER = 320  # 이미지 중심
 
@@ -175,11 +175,11 @@ class LaneDrivingController:
         base_speed = TARGET_SPEED
         curvature_abs = abs(self.lane_curvature)
         # 곡률 기준 속도 조정 (상대좌표 기준 임계값)
-        if curvature_abs > 200000:      # 매우 급한 커브
+        if curvature_abs > 500000:      # 매우 급한 커브
             return base_speed * 0.4
-        elif curvature_abs > 100000:    # 급한 커브  
+        elif curvature_abs > 200000:    # 급한 커브  
             return base_speed * 0.6
-        elif curvature_abs < 100000:    
+        elif curvature_abs < 200000:    
             return base_speed * 0.8
         else:                           # 직선 구간
             return base_speed
@@ -243,8 +243,8 @@ class LaneDrivingController:
             elif self.lane_curvature > 300000:  # 급한 커브
                 base_gain = self.lane_curvature / 300000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
-                curvature_gain = np.clip(curvature_gain, -12.0, 12.0)
-            elif self.lane_curvature > 100000:  # 일반 커브
+                curvature_gain = np.clip(curvature_gain, -14.0, 14.0)
+            elif self.lane_curvature > 150000:  # 일반 커브 # 100000일떄 잘 되긴함
                 base_gain = self.lane_curvature / 150000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
                 curvature_gain = np.clip(curvature_gain, -8.0, 8.0)
@@ -269,7 +269,7 @@ class LaneDrivingController:
         motor_cmd.header = Header()
         motor_cmd.header.stamp = rospy.Time.now()
         motor_cmd.header.frame_id = "map"
-        motor_cmd.angle = int(final_steer*4)
+        motor_cmd.angle = int(final_steer*4.5)
         motor_cmd.speed = int(throttle)
 
         self.prev_steer = final_steer
