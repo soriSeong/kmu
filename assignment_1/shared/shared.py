@@ -24,3 +24,6 @@ class Shared:
         # for obstacle avoidance
         self.obstacles = []
         self.dangerous_obstacles = []
+
+        # 보조 로직 라바콘 탈출 후 사용
+        self.cone_exit_done = False

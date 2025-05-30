@@ -18,7 +18,7 @@ class MotionPlanner(threading.Thread):
         self.ego = parent.shared.ego 
         self.motion = Motion(self.shared)
         self.path_pub = rospy.Publisher("/frenet_path", Path, queue_size=1)
-
+    
         self.lane_controller = LaneDrivingController(self.shared)
 
     def run(self):

@@ -176,16 +176,16 @@ class LaneDrivingController:
         curvature_abs = abs(self.lane_curvature)
         # 곡률 기준 속도 조정 (상대좌표 기준 임계값)
         if curvature_abs > 500000:      # 매우 급한 커브
-            return base_speed * 0.4
+            return base_speed * 0.3
         elif curvature_abs > 200000:    # 급한 커브  
-            return base_speed * 0.6
+            return base_speed * 0.4
         elif curvature_abs < 200000:    
-            return base_speed * 0.8
+            return base_speed * 0.5
         else:                           # 직선 구간
             return base_speed
 
     def smooth_steering_relative(self, new_steer):
-        """상대좌표 기준 조향각 부드럽게게"""
+        """상대좌표 기준 조향각 부드럽게 급변하는 것을 방지"""
         self.steer_history.append(new_steer)
         if len(self.steer_history) > 3:
             self.steer_history.pop(0)
@@ -211,10 +211,8 @@ class LaneDrivingController:
 
         # 데이터 유효성 체크
         if not self.target_x_received:
-            rospy.logwarn_throttle(3.0, "No target_x data - using center")
             self.target_x = IMAGE_CENTER
         if not self.lane_status_received:
-            rospy.logwarn_throttle(3.0, "No lane_status data - using BOTH")
             self.lane_status = "BOTH"
 
         # 커브 방향 감지
@@ -222,8 +220,7 @@ class LaneDrivingController:
 
         # 차선 상태에 따른 제어
         if self.lane_status == "LOST":
-            rospy.logwarn_throttle(2.0, "Lane lost - maintaining straight course")
-            steering_angle = self.prev_steer * 0.9  # 점진적 직진
+            steering_angle = self.prev_steer * 0.9  # 점진적으로 직진
             target_speed *= 0.8  # 감속
             curvature_gain = 0.0
             pid_steer = 0.0
@@ -253,9 +250,9 @@ class LaneDrivingController:
 
             # 차선 상태별 추가 조정 (상대좌표 기준)
             if self.lane_status == "LEFT":  # 왼쪽 차선만 보임 -> 우측으로 이동
-                steering_angle -= 2.0
+                steering_angle += 5.0
             elif self.lane_status == "RIGHT":  # 오른쪽 차선만 보임 -> 좌측으로 이동
-                steering_angle += 2.0
+                steering_angle -= 5.0
 
         # 조향각 스무딩
         final_steer = self.smooth_steering_relative(steering_angle)
@@ -269,7 +266,7 @@ class LaneDrivingController:
         motor_cmd.header = Header()
         motor_cmd.header.stamp = rospy.Time.now()
         motor_cmd.header.frame_id = "map"
-        motor_cmd.angle = int(final_steer*4.5)
+        motor_cmd.angle = int(final_steer * 5)
         motor_cmd.speed = int(throttle)
 
         self.prev_steer = final_steer

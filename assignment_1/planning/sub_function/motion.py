@@ -5,6 +5,7 @@ from controller.frenet_controller import FrenetController
 from controller.lane_driving import LaneDrivingController
 from controller.cone_driving import ConeDrivingController
 
+
 class Motion:
     def __init__(self, shared):
         self.shared = shared
@@ -16,7 +17,7 @@ class Motion:
         self.frenet_controller = FrenetController()
         self.lane_controller = LaneDrivingController(shared)
         self.cone_controller = ConeDrivingController(shared)
-        
+
         # 모터 제어 퍼블리셔
         self.actuator_pub = rospy.Publisher('/xycar_motor', XycarMotor, queue_size=10)
         
@@ -47,18 +48,31 @@ class Motion:
         self.actuator_pub.publish(motor_msg)
      
     def go(self):
-        """차선 기반 주행 (상대좌표 기준)"""
-        rospy.loginfo("Motion: Lane following (Relative Coordinate)")
+        """차선 기반 주행"""
+        rospy.loginfo("Motion: Lane following")
+
+        # 콘 주행 직후 한 번만 실행할 조향 + 전진
+        if hasattr(self.shared, 'cone_exit_done') and self.shared.cone_exit_done:
+            rospy.loginfo("Cone exit motion: right turn + short forward")
+            
+            transition_cmd = self.create_motor_command(angle=50, speed=7)
+            for _ in range(20):  # 2초간 (0.1s * 10)
+                self.actuator_pub.publish(transition_cmd)
+                rospy.sleep(0.1)
+
+            rospy.loginfo("Cone exit motion complete")
+            self.shared.cone_exit_done = False  # 다시 실행되지 않도록
+            return  # 아래 일반 lane follow는 이번 루프에서는 생략
+
+        # 이후 정상 lane follow
         try:
-            # 상대좌표 기준 차선 주행 컨트롤러 사용
             motor_cmd = self.lane_controller.lane_following_control()
             self.actuator_pub.publish(motor_cmd)
             rospy.sleep(0.1)
-            
         except Exception as e:
             rospy.logerr(f"Lane following error: {e}")
-            # 오류 시 비상 정지
             self.emergency_stop()
+
      
     def traffic_light(self):
         """신호등 제어"""
@@ -75,24 +89,24 @@ class Motion:
             self.target_control(35)
      
     def obs_small(self):
-        """작은 장애물 회피 - 라바콘 (상대좌표 기준)"""
-        rospy.loginfo("Motion: Small obstacle avoidance (Relative Coordinate)")
-        
+        """작은 장애물 회피 - 라바콘 (상대좌표 기준으로 추종)"""
+        rospy.loginfo("Motion: Small obstacle avoidance)")
         try:
-            # 상대좌표 기준 콘 드라이빙 컨트롤러 사용
             motor_cmd = self.cone_controller.follow_cone_path()
-            
+
             if motor_cmd:
                 self.actuator_pub.publish(motor_cmd)
-                rospy.loginfo("Cone path following command sent")
+                if not self.shared.cone_exit_done :
+                    self.shared.cone_exit_done  = True
             else:
-                # 백업: middle path가 없으면 단순 감속
-                rospy.logwarn("No cone path available, using simple speed control")
-                self.target_control(15)  # 감속 주행
+                rospy.loginfo("Cone driving finished, preparing to transition to go")
                 
+                self.plan.motion_decision = "go"
+
         except Exception as e:
             rospy.logerr(f"Cone driving error: {e}")
             self.target_control(10)  # 더 감속
+
 
     def obs_big(self):
         """차량 회피 - Optimal Frenet (상대좌표 기준)"""
