@@ -176,9 +176,9 @@ class LaneDrivingController:
         curvature_abs = abs(self.lane_curvature)
         # 곡률 기준 속도 조정 (상대좌표 기준 임계값)
         if curvature_abs > 500000:      # 매우 급한 커브
-            return base_speed * 0.3
+            return base_speed * 0.2
         elif curvature_abs > 200000:    # 급한 커브  
-            return base_speed * 0.4
+            return base_speed * 0.3
         elif curvature_abs < 200000:    
             return base_speed * 0.5
         else:                           # 직선 구간
@@ -236,15 +236,15 @@ class LaneDrivingController:
             if self.lane_curvature > 500000:  # 매우 급한 커브
                 base_gain = self.lane_curvature / 500000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
-                curvature_gain = np.clip(curvature_gain, -18.0, 18.0)
+                curvature_gain = np.clip(curvature_gain, -19.0, 19.0)
             elif self.lane_curvature > 300000:  # 급한 커브
                 base_gain = self.lane_curvature / 300000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
-                curvature_gain = np.clip(curvature_gain, -14.0, 14.0)
-            elif self.lane_curvature > 100000:  # 일반 커브
+                curvature_gain = np.clip(curvature_gain, -15.0, 15.0)
+            elif self.lane_curvature > 150000:  # 일반 커브
                 base_gain = self.lane_curvature / 150000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
-                curvature_gain = np.clip(curvature_gain, -8.0, 8.0)
+                curvature_gain = np.clip(curvature_gain, -10.0, 10.0)
             
             steering_angle += curvature_gain
 
