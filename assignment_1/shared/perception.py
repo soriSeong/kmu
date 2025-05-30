@@ -49,13 +49,8 @@ class Perception:
         self.middle_path = []
         
         for marker in data.markers:
-            # SPHERE 타입 마커에서 position 좌표 추출
-            if marker.type == Marker.SPHERE:
-                x = marker.pose.position.x
-                y = marker.pose.position.y
-                self.middle_path.append((x, y))
+            x = marker.pose.position.x
+            y = marker.pose.position.y
+            self.middle_path.append((x, y))
 
-        # 차량에 가까운순으로 정렬 
-        if self.middle_path:
-            self.middle_path.sort(key=lambda point: hypot(point[0], point[1]))
-            rospy.logdebug(f"Middle path updated: {len(self.middle_path)} points")
+
