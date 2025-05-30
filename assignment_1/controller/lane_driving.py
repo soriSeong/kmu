@@ -11,7 +11,7 @@ import rospy
 import tf
 
 # 파라미터 설정
-TARGET_SPEED = 25  # 목표 속도
+TARGET_SPEED = 30  # 목표 속도
 IMAGE_WIDTH = 640  # 이미지 너비
 IMAGE_CENTER = 320  # 이미지 중심
 
@@ -109,6 +109,9 @@ class LaneDrivingController:
         self.lane_status = "BOTH"
         self.lane_curvature = 0.0  # 곡률
         
+        # 커브 방향 판단을 위한 간단한 방법 (target_x 위치 기준)
+        self.curve_direction = 0  # -1: 좌회전, 0: 직진, 1: 우회전
+        
         # 데이터 수신 플래그
         self.target_x_received = False
         self.lane_status_received = False
@@ -120,13 +123,14 @@ class LaneDrivingController:
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_callback)
         rospy.Subscriber('/current_velocity', TwistStamped, self.velocity_callback)
         
-        rospy.loginfo("Lane Driving Controller initialized (Relative Coordinate)")
+        rospy.loginfo("Lane Driving Controller initialized (Curve Direction Detection)")
 
     def target_x_callback(self, msg):
         """차선 중심 픽셀 좌표 수신"""
         if 50 <= msg.data <= 590:  # 유효 범위 체크
             self.target_x = msg.data
             self.target_x_received = True
+                
         else:
             rospy.logwarn(f"Invalid target_x received: {msg.data}")
 
@@ -156,25 +160,32 @@ class LaneDrivingController:
         if self.ego:
             self.ego.speed = msg.twist.linear.x
 
+    def detect_curve_direction(self):
+        """target_x 위치로 커브 방향 판단 (간단한 방법)"""
+        # 이미지 중심(320)을 기준으로 방향 판단
+        if self.target_x < IMAGE_CENTER:  # 320보다 작으면 좌회전
+            return -1  # 좌회전
+        elif self.target_x > IMAGE_CENTER:  # 320보다 크면 우회전
+            return 1   # 우회전
+        else:  # 정확히 중심이면 직진
+            return 0   # 직진
+
     def calculate_target_speed_relative(self):
         """상대좌표 기준 곡률에 따른 목표 속도 계산"""
         base_speed = TARGET_SPEED
         curvature_abs = abs(self.lane_curvature)
-        
         # 곡률 기준 속도 조정 (상대좌표 기준 임계값)
         if curvature_abs > 200000:      # 매우 급한 커브
-            return base_speed * 0.6
+            return base_speed * 0.4
         elif curvature_abs > 100000:    # 급한 커브  
-            return base_speed * 0.75
-        elif curvature_abs > 50000:     # 중간 커브
-            return base_speed * 0.85
-        elif curvature_abs > 20000:     # 완만한 커브
-            return base_speed * 0.95
+            return base_speed * 0.6
+        elif curvature_abs < 100000:    
+            return base_speed * 0.8
         else:                           # 직선 구간
             return base_speed
 
     def smooth_steering_relative(self, new_steer):
-        """상대좌표 기준 조향각 스무딩"""
+        """상대좌표 기준 조향각 부드럽게게"""
         self.steer_history.append(new_steer)
         if len(self.steer_history) > 3:
             self.steer_history.pop(0)
@@ -206,6 +217,9 @@ class LaneDrivingController:
             rospy.logwarn_throttle(3.0, "No lane_status data - using BOTH")
             self.lane_status = "BOTH"
 
+        # 커브 방향 감지
+        self.curve_direction = self.detect_curve_direction()
+
         # 차선 상태에 따른 제어
         if self.lane_status == "LOST":
             rospy.logwarn_throttle(2.0, "Lane lost - maintaining straight course")
@@ -220,13 +234,20 @@ class LaneDrivingController:
             )
             steering_angle = pid_steer
 
-            # 곡률 기반 조향 보정 (상대좌표 기준)
-            if abs(self.lane_curvature) > 500000:  # 매우 급한 커브
-                curvature_gain = np.clip(self.lane_curvature / 50000.0, -18.0, 18.0)
-            elif abs(self.lane_curvature) > 100000:  # 급한 커브
-                curvature_gain = np.clip(self.lane_curvature / 30000.0, -12.0, 12.0)
-            else:  # 일반 커브
-                curvature_gain = np.clip(self.lane_curvature / 15000.0, -8.0, 8.0)
+            # 곡률 기반 조향 보정 (방향 고려)
+            curvature_gain = 0.0
+            if self.lane_curvature > 500000:  # 매우 급한 커브
+                base_gain = self.lane_curvature / 500000.0
+                curvature_gain = base_gain * self.curve_direction  # 방향 적용
+                curvature_gain = np.clip(curvature_gain, -18.0, 18.0)
+            elif self.lane_curvature > 300000:  # 급한 커브
+                base_gain = self.lane_curvature / 300000.0
+                curvature_gain = base_gain * self.curve_direction  # 방향 적용
+                curvature_gain = np.clip(curvature_gain, -12.0, 12.0)
+            elif self.lane_curvature > 100000:  # 일반 커브
+                base_gain = self.lane_curvature / 150000.0
+                curvature_gain = base_gain * self.curve_direction  # 방향 적용
+                curvature_gain = np.clip(curvature_gain, -8.0, 8.0)
             
             steering_angle += curvature_gain
 
@@ -238,7 +259,7 @@ class LaneDrivingController:
 
         # 조향각 스무딩
         final_steer = self.smooth_steering_relative(steering_angle)
-        final_steer = np.clip(final_steer, -20, 20)  # 물리적 한계
+        final_steer = np.clip(final_steer, -20, 20)
 
         # 속도 제어
         throttle = self.speed_pid.update_speed_error(target_speed, ego_speed)
@@ -248,18 +269,19 @@ class LaneDrivingController:
         motor_cmd.header = Header()
         motor_cmd.header.stamp = rospy.Time.now()
         motor_cmd.header.frame_id = "map"
-        motor_cmd.angle = int(final_steer)
+        motor_cmd.angle = int(final_steer*4)
         motor_cmd.speed = int(throttle)
 
         self.prev_steer = final_steer
 
-        # 상대좌표 기준 디버그 로그
+        # 상대좌표 기준 디버그 로그 (방향 정보 추가)
         pixel_error = self.target_x - IMAGE_CENTER
-        lateral_distance_error = (pixel_error / (IMAGE_WIDTH/4)) * 2.0  # 상대거리 [m]
+        lateral_distance_error = (pixel_error / (IMAGE_WIDTH/4)) * 2.0
+        curve_direction_str = "LEFT" if self.curve_direction == -1 else "RIGHT" if self.curve_direction == 1 else "STRAIGHT"
         
         rospy.loginfo_throttle(1.0, 
-            f"Lane Relative - Status: {self.lane_status} | "
-            f"Pixel Error: {pixel_error:+4d}px ({lateral_distance_error:+.2f}m) | "
+            f"Lane - Status: {self.lane_status} | Direction: {curve_direction_str} | "
+            f"Pixel Error: {pixel_error:+4d}px | "
             f"PID: {pid_steer:+5.1f}° | Curve: {curvature_gain:+5.1f}° | "
             f"Final: {final_steer:+5.1f}° | Curvature: {self.lane_curvature:.0f}")
         
@@ -280,6 +302,7 @@ class LaneDrivingController:
         """상대좌표 기준 상태 반환"""
         pixel_error = self.target_x - IMAGE_CENTER
         lateral_distance_error = (pixel_error / (IMAGE_WIDTH/4)) * 2.0
+        curve_direction_str = "LEFT" if self.curve_direction == -1 else "RIGHT" if self.curve_direction == 1 else "STRAIGHT"
         
         return {
             'coordinate_system': 'relative',
@@ -287,6 +310,7 @@ class LaneDrivingController:
             'lateral_distance_error_m': lateral_distance_error,
             'lane_status': self.lane_status,
             'lane_curvature': self.lane_curvature,
+            'curve_direction': curve_direction_str,
             'target_x_px': self.target_x,
             'image_center_px': IMAGE_CENTER
         }

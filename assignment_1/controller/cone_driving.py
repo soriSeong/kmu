@@ -35,24 +35,23 @@ class ConeDrivingController:
             if not self.perception.middle_path:
                 rospy.logwarn("No middle path available")
                 return None
-                
-            
             
             
             # 목표점 찾기 (Pure Pursuit)
             target_point = self.perception.middle_path[0]
+            rospy.loginfo(f"[Cone Driving] Target point (relative): x={target_point[0]:.2f}, y={target_point[1]:.2f}")
             
             # 조향각 계산
             steer_angle = self.pure_pursuit_from_relative_point(target_point)
             
             # 속도 계산 (곡률에 따라 조정)
-            target_speed = 15
+            target_speed = 7
             
             
             
             # 모터 명령 생성
-            return self.create_motor_command(steer_angle, target_speed)
-            
+            return self.create_motor_command(steer_angle*3.6, target_speed)
+
         except Exception as e:
             rospy.logerr(f"Cone path following error: {e}")
             return self.create_motor_command(0, 10)  # 비상 명령
