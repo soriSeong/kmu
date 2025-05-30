@@ -1,7 +1,7 @@
 import math
 import numpy as np
-from utils.path_enum import ReedsSheppPathType
-from utils.path_type_funcs import (
+from .utils.path_enum import ReedsSheppPathType
+from .utils.path_type_funcs import (
     LSL, LSR, L_X_R_X_L,
     L_X_RL, LR_X_L, LR_X_LL,
     LR_X_L_X_R, L_X_R90SL, LSR90_X_R,

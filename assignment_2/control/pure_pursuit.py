@@ -1,207 +1,255 @@
-import os
-import sys
+#!/usr/bin/env python3
+import rospy
+import tf
 import math
-import numpy as np
+from geometry_msgs.msg import PoseStamped
+from xycar_msgs.msg import XycarMotor
+from reeds_shepp_path import calc_optimal_path, STEP_SIZE
 
-# reeds_shepp path planning algorithm 라이브러리 
-from .planning.reeds_shepp_path import calc_optimal_path
-
-# 알고리즘에 사용하는 상수들을 모아놓은 클래스
-class C:
-    # PID 파라미터
-    Kp = 0.8  # proportional gain
-    Ki = 0.0  # Integral gain
-    Kd = 0.01  # derivative gain
-    
-    # 차량의 제어 알고리즘에서 사용될 parameter를 설정한다.
-    # 전방 주행 차량이나 추종하고자 하는 경로와의 거리를 설정한다. 
-    Ld = 2.6 
-    # Lf = Kf * v + Ld
-    # Lf : 경로를 따라가며 추적할 목표 지점과의 거리
-    kf = 0.1  # 목표 지점과의 거리를 계산할 때 사용되는 상수
-    dt = 0.1  # 제어 주기
-    dist_stop = 0.7  # 정지 거리
-    # 전방 주행 idx와의 거리
-    dc = 0.0
-
-    # 차량 파라미터
-    RF = 3.3 * 33  # [m] 차량의 전방에서 차량의 전면까지의 거리
-    RB = 0.8 * 33 # [m] 차량의 전방에서 차량의 후면까지의 거리
-    W = 2.4 * 33  # [m] 차량의 너비
-    WD = 0.7 * W  # [m] 차량의 후륜의 너비
-    WB = 84  # [m] 차량의 축 거리 - 전륜과 후륜의 중간(휠 베이스)
-    TR = 0.44 * 33  # [m] 차량의 타이어 반지름
-    TW = 0.7 * 33  # [m] 차량의 타이어 너비
-    MAX_STEER = 0.3491 * 0.75 # [rad] 최대 조향각 [약 20deg]
-    MAX_ACCELERATION = 5.0 # [m/s^2] 최대 가속도
-
-class Node:
-    def __init__(self, x, y, yaw, v, direct):
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-        self.v = v
-        self.direct = direct
-
-    def update(self, a, delta, direct):
-        # delta = self.limit_input(delta)
-        self.x += self.v * math.cos(self.yaw) * C.dt
-        self.y += self.v * math.sin(self.yaw) * C.dt
-        self.yaw += self.v / C.WB * math.tan(delta) * C.dt
-        self.direct = direct
-        self.v = self.direct * a 
-
-    @staticmethod
-    # 조향각을 제한한다. 마찬가지로 이번 미션에서는 사용하지 않는다.
-    def limit_input(delta):
-        if delta > 1.2 * C.MAX_STEER:
-            return 1.2 * C.MAX_STEER
-
-        if delta < -1.2 * C.MAX_STEER:
-            return -1.2 * C.MAX_STEER
-
-        return delta
-
-# 차량의 상태의 클래스를 리스트로 저장하는 클래스
-class Nodes:
+class RelativePurePursuit:
     def __init__(self):
-        # 차량의 위치와 각도, 속도, 진행 방향, 시간을 리스트로 저장한다.
-        self.x = []
-        self.y = []
-        self.yaw = []
-        self.v = []
-        self.t = []
-        self.direct = []
-    # 현재 차량의 상태를 받아오면 리스트에 추가하는 함수.
-    def add(self, t, node):
-        self.x.append(node.x)
-        self.y.append(node.y)
-        self.yaw.append(node.yaw)
-        self.v.append(node.v)
-        self.t.append(t)
-        self.direct.append(node.direct)
-
-#경로를 저장하는 클래스
-class PATH:
-    # x, y 경로 리스트와 경로의 길이를 저장한다.
-    def __init__(self, cx, cy):
-        self.cx = cx
-        self.cy = cy
-        # 경로의 길이를 저장한다.
-        self.ind_end = len(self.cx) - 1
-        # 이전 목표로 설정한 경로의 인덱스를 저장한다.
-        self.index_old = None
-
-    # 목표 인덱스를 설정하는 함수
-    # 현재 차량의 위치와 가장 가까운 경로의 인덱스를 찾는다.
-    def target_index(self, node):
-        if self.index_old is None:
-            self.calc_nearest_ind(node)
+        rospy.init_node("relative_pure_pursuit")
         
-        # 경로를 따라가며 추적할 목표 지점과의 거리 계산
-        # Lf : kf(상수 게인값) * 차량의 속도 + Ld(전방 주시거리)
-        Lf = C.kf * node.v + C.Ld
+        # Publishers & Subscribers
+        self.motor_pub = rospy.Publisher('/xycar_motor', XycarMotor, queue_size=1)
+        rospy.Subscriber("/apriltag_pose", PoseStamped, self.apriltag_callback)
+        
+        # 차량 파라미터
+        self.wheelbase = 0.25  # 25cm 휠베이스
+        self.max_steer_angle = 30  # 최대 조향각 (degrees)
+        
+        # Pure Pursuit 파라미터
+        self.lookahead_distance = 0.3  # 전방 주시 거리
+        self.lookahead_gain = 0.1  # 속도에 따른 주시거리 조정 게인
+        self.min_lookahead = 0.2   # 최소 주시거리
+        self.max_lookahead = 0.6   # 최대 주시거리
+        
+        # 경로 추종 상태
+        self.current_position = [0.0, 0.0, 0.0]  # 항상 원점 기준 (상대위치)
+        self.path_points = []
+        self.current_path_index = 0
+        self.goal_tolerance = 0.1  # 목표 도달 허용 오차
+        
+        # 제어 패러미터 조정
+        self.base_speed = 8
+        self.control_rate = 20  # 20Hz
+        self.goal_tolerance = 0.05  # 목표 도달 허용 오차를 더 엄격하게
+        
+    def apriltag_callback(self, msg):
+        """AprilTag 검출 시 호출되는 콜백"""
+        # AprilTag 위치 추출
+        x = msg.pose.position.x
+        y = msg.pose.position.y
+        q = msg.pose.orientation
+        _, _, yaw = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        
+        goal_position = (x, y, yaw)
+        rospy.loginfo(f"AprilTag 검출: x={x:.2f}, y={y:.2f}, yaw={math.degrees(yaw):.1f}°")
+        
+        # 경로 생성 및 추종 시작
+        self.plan_and_follow_path(goal_position)
+        
+    def plan_and_follow_path(self, goal):
+        """경로 계획 및 추종 실행"""
+        start = tuple(self.current_position)
+        
+        # Reeds-Shepp 경로 생성
+        optimal_path = calc_optimal_path(*start, *goal, 1.0, STEP_SIZE)
+        
+        if optimal_path is None:
+            rospy.logwarn("경로 생성 실패")
+            return
+            
+        # 경로 포인트 저장
+        self.path_points = list(zip(optimal_path.x, optimal_path.y, optimal_path.yaw))
+        self.current_path_index = 0
+        
+        rospy.loginfo(f"경로 생성 완료: {len(self.path_points)}개 포인트")
+        
+        # 경로 추종 시작
+        self.follow_path()
+        
+    def follow_path(self):
+        """Pure Pursuit을 이용한 경로 추종"""
+        rate = rospy.Rate(self.control_rate)
+        
+        while not rospy.is_shutdown() and self.current_path_index < len(self.path_points):
+            # Lookahead 포인트 찾기
+            lookahead_point, target_index = self.find_lookahead_point()
+            
+            if lookahead_point is None:
+                rospy.logwarn("Lookahead 포인트를 찾을 수 없습니다")
+                break
+                
+            # Pure Pursuit 조향각 계산
+            steering_angle = self.calculate_pure_pursuit_steering(lookahead_point)
+            
+            # 속도 계산 (목표 근처에서 감속)
+            speed = self.calculate_speed()
+            
+            # 모터 제어 명령 발행
+            self.publish_motor_command(steering_angle, speed)
+            
+            # 경로 인덱스 업데이트 (상대위치에서는 시간 기반으로 진행)
+            self.update_path_progress()
+            
+            # 목표 도달 확인
+            if self.is_goal_reached():
+                rospy.loginfo("목표 지점 도달!")
+                break
+                
+            rate.sleep()
+            
+        # 정지
+        self.publish_motor_command(0, 0)
+        rospy.loginfo("경로 추종 완료")
+        
+    def find_lookahead_point(self):
+        """경로 진행도를 고려한 lookahead 포인트 찾기"""
+        if not self.path_points:
+            return None, -1
+            
+        # 동적 lookahead 거리 계산
+        current_speed = abs(self.base_speed) * 0.1
+        dynamic_lookahead = self.lookahead_gain * current_speed + self.lookahead_distance
+        dynamic_lookahead = max(self.min_lookahead, min(dynamic_lookahead, self.max_lookahead))
+        
+        # 현재 진행 지점을 가상의 현재 위치로 설정
+        if self.current_path_index >= len(self.path_points):
+            self.current_path_index = len(self.path_points) - 1
+            
+        virtual_current = self.path_points[self.current_path_index]
+        
+        # 가상 현재 위치에서 lookahead 거리만큼 떨어진 포인트 찾기
+        for i in range(self.current_path_index, len(self.path_points)):
+            point = self.path_points[i]
+            distance = math.sqrt(
+                (point[0] - virtual_current[0])**2 + 
+                (point[1] - virtual_current[1])**2
+            )
+            
+            if distance >= dynamic_lookahead:
+                return point, i
+        
+        # 경로 끝에 도달한 경우 마지막 포인트 반환
+        return self.path_points[-1], len(self.path_points) - 1
+        
+    def calculate_pure_pursuit_steering(self, lookahead_point):
+        """Pure Pursuit 알고리즘을 이용한 조향각 계산 (가상 현재 위치 기준)"""
+        # 가상의 현재 위치 (경로 진행도 기준)
+        if self.current_path_index < len(self.path_points):
+            virtual_current = self.path_points[self.current_path_index]
+        else:
+            virtual_current = self.path_points[-1]
+        
+        # 가상 현재 위치와 목표 포인트 사이의 상대 위치
+        dx = lookahead_point[0] - virtual_current[0]
+        dy = lookahead_point[1] - virtual_current[1]
+        
+        # 가상 현재 위치의 방향을 고려한 좌표 변환
+        cos_yaw = math.cos(virtual_current[2])
+        sin_yaw = math.sin(virtual_current[2])
+        
+        # 차량 좌표계에서의 목표점 위치
+        local_x = dx * cos_yaw + dy * sin_yaw
+        local_y = -dx * sin_yaw + dy * cos_yaw
+        
+        # Lookahead 거리
+        lookahead_dist = math.sqrt(local_x**2 + local_y**2)
+        
+        if lookahead_dist < 0.01:  # 너무 가까우면 직진
+            return 0.0
+            
+        # Pure Pursuit 공식: delta = atan2(2 * L * sin(alpha), Ld)
+        alpha = math.atan2(local_y, local_x)
+        steering_angle = math.atan2(2.0 * self.wheelbase * math.sin(alpha), lookahead_dist)
+        
+        # 조향각을 도(degree)로 변환 및 제한
+        steering_degrees = math.degrees(steering_angle)
+        steering_degrees = max(-self.max_steer_angle, min(steering_degrees, self.max_steer_angle))
+        
+        return steering_degrees
+        
+    def calculate_speed(self):
+        """현재 상황에 맞는 속도 계산"""
+        if not self.path_points:
+            return 0
+            
+        # 가상 현재 위치에서 목표점까지의 거리 계산
+        goal_point = self.path_points[-1]
+        if self.current_path_index < len(self.path_points):
+            virtual_current = self.path_points[self.current_path_index]
+        else:
+            virtual_current = self.path_points[-1]
+            
+        distance_to_goal = math.sqrt(
+            (goal_point[0] - virtual_current[0])**2 + 
+            (goal_point[1] - virtual_current[1])**2
+        )
+        
+        # 목표 근처에서 점진적 감속
+        if distance_to_goal < 0.3:
+            return max(3, int(self.base_speed * 0.4))  # 매우 느리게
+        elif distance_to_goal < 0.6:
+            return max(4, int(self.base_speed * 0.6))  # 느리게
+        elif distance_to_goal < 1.0:
+            return max(6, int(self.base_speed * 0.8))  # 조금 느리게
+        else:
+            return self.base_speed  # 정상 속도
+            
+    def update_path_progress(self):
+        """경로 진행 상황 업데이트 (속도 기반)"""
+        if self.current_path_index < len(self.path_points) - 1:
+            # 현재 속도에 기반한 진행률 계산
+            speed_factor = abs(self.base_speed) / 100.0  # 속도를 0-1 범위로 정규화
+            progress_increment = max(1, int(speed_factor * 3))  # 최소 1, 최대 3씩 진행
+            
+            self.current_path_index = min(
+                len(self.path_points) - 1,
+                self.current_path_index + progress_increment
+            )
+            
+            # 진행 상황 로그
+            progress_percent = (self.current_path_index / len(self.path_points)) * 100
+            rospy.logdebug(f"경로 진행률: {progress_percent:.1f}% ({self.current_path_index}/{len(self.path_points)})")
+            
+    def is_goal_reached(self):
+        """목표 도달 여부 확인 (실제 목표점 기준)"""
+        if not self.path_points:
+            return True
+            
+        # 경로의 마지막 포인트 (실제 AprilTag 위치)
+        goal_point = self.path_points[-1]
+        
+        # 가상 현재 위치에서 목표점까지의 거리
+        if self.current_path_index < len(self.path_points):
+            virtual_current = self.path_points[self.current_path_index]
+        else:
+            virtual_current = self.path_points[-1]
+            
+        distance_to_goal = math.sqrt(
+            (goal_point[0] - virtual_current[0])**2 + 
+            (goal_point[1] - virtual_current[1])**2
+        )
+        
+        # 목표점에 충분히 가까이 도달했는지 확인
+        return distance_to_goal < self.goal_tolerance or self.current_path_index >= len(self.path_points) - 1
+        
+    def publish_motor_command(self, steering_angle, speed):
+        """모터 제어 명령 발행"""
+        msg = XycarMotor()
+        msg.angle = int(max(-self.max_steer_angle, min(steering_angle, self.max_steer_angle)))
+        msg.speed = int(speed)
+        self.motor_pub.publish(msg)
+        
+        # 디버그 정보 출력
+        rospy.logdebug(f"제어 명령: 조향각={msg.angle}°, 속도={msg.speed}")
 
-        # 이전 경로 인덱스와 경로 끝 인덱스까지의 고려하여 다음 경로의 인덱스를 찾는다.
-        for ind in range(self.index_old, self.ind_end + 1):
-            # 목표 지점과의 거리가 Lf보다 크면 다음 경로의 인덱스를 찾는다.
-            if self.calc_distance(node, ind) > Lf:
-                # 다음 경로의 인덱스를 찾았으면 해당 경로의 인덱스를 반환한다.
-                self.index_old = ind
-                # 다음 경로의 인덱스와 목표 지점과의 거리를 반환한다.
-                return ind, Lf
-        # 경로 끝까지 도달했으면 경로 끝 인덱스를 반환한다.
-        self.index_old = self.ind_end
-        return self.ind_end, Lf
 
-    # 현재 차량의 위치와 가장 가까운 경로의 인덱스를 찾는 함수
-    def calc_nearest_ind(self, node):
-        dx = [node.x - x for x in self.cx]
-        dy = [node.y - y for y in self.cy]
-
-        ind = np.argmin(np.hypot(dx, dy))
-
-        self.index_old = ind
-    # 현재 차량의 위치와 경로의 인덱스를 이용하여 경로를 따라가며 추적할 목표 지점과의 거리를 계산하는 함수
-    def calc_distance(self, node, ind):
-        return math.hypot(node.x - self.cx[ind], node.y - self.cy[ind])
-
-# pure pursuit 알고리즘을 이용하여 차량의 조향각을 계산하는 함수
-def pure_pursuit(node, ref_path, index_old):
-    ind, Lf = ref_path.target_index(node)  
-    ind = max(ind, index_old)
-
-    tx = ref_path.cx[ind]
-    ty = ref_path.cy[ind]
-    alpha = math.atan2(ty - node.y, tx - node.x) - node.yaw
-    delta = math.atan2(2.0 * C.WB * math.sin(alpha), Lf)
-    return delta, ind
-
-def pid_control(target_v, v, dist, direct):
-    # pid 제어
-    a = (C.Kp * (target_v - v) + C.Kd * (target_v - v) + C.Ki * (target_v - v)) * direct
-    # 목표 지점과의 거리가 10m 이내이고 차량의 속도가 3m/s 이상이면 감속
-    if dist < 10.0:
-        if v > 3.0:
-            a = -2.5
-        elif v < -2.0:
-            a = -1.0
-
-    return a
-
-def generate_path(s):
-    max_c = math.tan(C.MAX_STEER) / C.WB  
-    path_x, path_y, yaw, direct = [], [], [], []
-    
-    x_rec, y_rec, yaw_rec, direct_rec = [], [], [], []
-
-    direct_flag = 1.0
-
-    for i in range(len(s) - 1):
-        s_x, s_y, s_yaw = s[i][0], s[i][1], np.deg2rad(s[i][2])
-        s_x, s_y, s_yaw = s[i][0], s[i][1], np.deg2rad(s[i][2])
-        g_x, g_y, g_yaw = s[i + 1][0], s[i + 1][1], np.deg2rad(s[i + 1][2])
-
-        path_i = rs.calc_optimal_path(s_x, s_y, s_yaw,
-                                      g_x, g_y, g_yaw, max_c)
-        ix = path_i.x
-        iy = path_i.y
-        iyaw = path_i.yaw
-        idirect = path_i.directions
-        # 경로의 x, y 좌표, 각도, 방향을 저장한다.
-        for j in range(len(ix)):
-            # 이전 경로의 방향과 현재 경로의 방향이 같으면 경로의 x, y 좌표, 각도, 방향을 리스트에 추가한다.
-            if idirect[j] == direct_flag:
-                # 경로의 x, y 좌표, 각도, 방향을 리스트에 추가한다.
-                x_rec.append(ix[j])
-                y_rec.append(iy[j])
-                yaw_rec.append(iyaw[j])
-                direct_rec.append(idirect[j])
-            # 이전 경로의 방향과 현재 경로의 방향이 다르면 경로 리스트를 2차원 리스트에 추가하고
-            # 경로의 x, y 좌표, 각도, 방향을 저장하는 임시 리스트를 초기화한다.
-            else:
-                if len(x_rec) == 0 or direct_rec[0] != direct_flag:
-                    direct_flag = idirect[j]
-                    continue
-                path_x.append(x_rec)
-                path_y.append(y_rec)
-                yaw.append(yaw_rec)
-                direct.append(direct_rec)
-                # 경로의 x, y 좌표, 각도, 방향을 저장하는 임시 리스트를 초기화한다.
-                x_rec, y_rec, yaw_rec, direct_rec = \
-                    [x_rec[-1]], [y_rec[-1]], [yaw_rec[-1]], [-direct_rec[-1]]
-                    
-    # 경로 리스트를 2차원 리스트에 추가한다.
-    path_x.append(x_rec)
-    path_y.append(y_rec)
-    yaw.append(yaw_rec)
-    direct.append(direct_rec)
-    # 모든 경로의 x, y 리스트를 담을 리스트를 생성한다.
-    x_all, y_all = [], []
-    # 모든 경로의 x, y값을 리스트에 저장한다.
-    for ix, iy in zip(path_x, path_y):
-        x_all += ix
-        y_all += iy
-    # 경로의 x, y 좌표, 각도, 방향, 모든 경로의 x, y 좌표를 반환한다.
-    return path_x, path_y, yaw, direct, x_all, y_all
-
+if __name__ == "__main__":
+    try:
+        controller = RelativePurePursuit()
+        rospy.loginfo("상대위치 Pure Pursuit 시작")
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        rospy.loginfo("Pure Pursuit 종료")
