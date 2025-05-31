@@ -175,16 +175,16 @@ class LaneDrivingController:
         base_speed = TARGET_SPEED
         curvature_abs = abs(self.lane_curvature)
         # 곡률 기준 속도 조정 (상대좌표 기준 임계값)
-        if curvature_abs > 1000000:  # 곡선이 튀거나 엄청 급한 커브
-            return base_speed * 0.15
+        if curvature_abs > 1000000:  # 곡선이 튀거나 급한 커브
+            return base_speed * 0.2
         if curvature_abs > 700000:      # 매우 급한 커브
-            return base_speed * 0.25
+            return base_speed * 0.4
         elif curvature_abs > 500000:    # 급한 커브  
-            return base_speed * 0.35
-        elif curvature_abs < 300000:    
             return base_speed * 0.5
-        elif curvature_abs < 200000:    # 일반 커브
+        elif curvature_abs < 300000:    
             return base_speed * 0.6
+        elif curvature_abs < 200000:    # 일반 커브
+            return base_speed * 0.7
         else:                           # 직선 구간
             return base_speed   
 

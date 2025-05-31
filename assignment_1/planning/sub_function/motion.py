@@ -5,6 +5,12 @@ from controller.frenet_controller import FrenetController
 from controller.lane_driving import LaneDrivingController
 from controller.cone_driving import ConeDrivingController
 
+TARGETX_JUMP_THRESHOLD = 110 # target_x 급격한 변화 감지 임계값 (픽셀 단위) 높을 수록 감지 민감도 낮아짐
+
+# 후진 속도 및 지속 시간 설정
+STOP_DURATION = 0.1       # Spike 발생 시 먼저 얼만큼 정지할지
+REVERSE_SPEED = -8     # 후진 속도
+REVERSE_DURATION = 1.5  # 후진 지속 시간(초)
 
 class Motion:
     def __init__(self, shared):
@@ -17,6 +23,15 @@ class Motion:
         self.frenet_controller = FrenetController()
         self.lane_controller = LaneDrivingController(shared)
         self.cone_controller = ConeDrivingController(shared)
+
+        # Spike 감지를 위한 이전 target_x 저장 변수
+        self.prev_target_x = None
+
+        # 후진 모드 관리 변수: None이면 후진 중 아님    
+        self.reverse_end_time = None
+
+        # Spike 발생시 정지
+        self.stop_end_time = None
 
         # 모터 제어 퍼블리셔
         self.actuator_pub = rospy.Publisher('/xycar_motor', XycarMotor, queue_size=10)
@@ -32,7 +47,7 @@ class Motion:
         motor_msg.angle = int(angle)
         motor_msg.speed = int(speed)
         return motor_msg
-            
+    
     def target_control(self, speed):
         """기본 속도 제어 (직진)"""
         if self.ego:
@@ -48,23 +63,77 @@ class Motion:
         self.actuator_pub.publish(motor_msg)
      
     def go(self):
-        """차선 기반 주행"""
+        """차선 기반 주행 + spike 감지 → 정지 → 후진 → 정상 복귀"""
         rospy.loginfo("Motion: Lane following")
+        now = rospy.Time.now()
 
         # 콘 주행 직후 한 번만 실행할 조향 + 전진
         if hasattr(self.shared, 'cone_exit_done') and self.shared.cone_exit_done:
             rospy.loginfo("Cone exit motion: right turn + short forward")
-            
             transition_cmd = self.create_motor_command(angle=40, speed=7)
-            for _ in range(30):  # 2초간 (0.1s * 10)
+            for _ in range(30):  # 약 3초간 (0.1s * 30)
                 self.actuator_pub.publish(transition_cmd)
                 rospy.sleep(0.1)
-
             rospy.loginfo("Cone exit motion complete")
-            self.shared.cone_exit_done = False  # 다시 실행되지 않도록
-            return  # 아래 일반 lane follow는 이번 루프에서는 생략
+            self.shared.cone_exit_done = False
+            return
 
-        # 이후 정상 lane follow
+        # STEP1: 정지 모드 처리: stop_end_time이 None이 아니면 먼저 정지만 수행
+        if self.stop_end_time is not None:
+            if now < self.stop_end_time:
+                # 아직 정지 유지 시간(0.3초) 이내 → 계속 정지(속도=0)
+                rospy.logwarn_throttle(1.0, "Stopping (preparing to reverse) ...")
+                stop_cmd = self.create_motor_command(angle=0, speed=0)
+                self.actuator_pub.publish(stop_cmd)
+                return
+            else:
+                # 정지 시간이 끝난 시점 → 정지 모드 해제, 후진 모드 진입
+                rospy.loginfo("Stop complete. Entering reverse mode.")
+                self.stop_end_time = None
+                self.reverse_end_time = now + rospy.Duration(REVERSE_DURATION)
+                rev_cmd = self.create_motor_command(angle=0, speed=REVERSE_SPEED)
+                self.actuator_pub.publish(rev_cmd)
+                return
+
+        # STEP2: 후진 모드 처리: reverse_end_time이 None이 아니면 계속 후진
+        if self.reverse_end_time is not None:
+            if now < self.reverse_end_time:
+                # 아직 후진 유지 시간이내 계속 후진
+                rospy.logwarn_throttle(1.0, "Reversing (due to target_x spike) ...")
+                rev_cmd = self.create_motor_command(angle=0, speed=REVERSE_SPEED)
+                self.actuator_pub.publish(rev_cmd)
+                return
+            else:
+                # 후진 시간이 끝난 시점 → 후진 모드 해제, prev_target_x 초기화
+                rospy.loginfo("Reversing complete. Resuming normal lane follow.")
+                self.reverse_end_time = None
+                self.prev_target_x = None
+                # 마지막으로 한 번 더 후진 명령을 보내고 return
+                rev_cmd = self.create_motor_command(angle=0, speed=REVERSE_SPEED)
+                self.actuator_pub.publish(rev_cmd)
+                return
+
+        # STEP3: Spike 감지 (target_x 급격한 변화만 사용)
+        curr_target_x = self.lane_controller.target_x
+        jump_detected = False
+
+        if self.prev_target_x is not None:
+            if abs(curr_target_x - self.prev_target_x) > TARGETX_JUMP_THRESHOLD:
+                jump_detected = True
+
+        if jump_detected:
+            rospy.logwarn(f"Spike detected! Δtarget_x={abs(curr_target_x - self.prev_target_x)} > {TARGETX_JUMP_THRESHOLD}")
+            # Spike 발생 시, 먼저 정지 모드 진입 (0.3초 동안)
+            self.stop_end_time = now + rospy.Duration(STOP_DURATION)
+            stop_cmd = self.create_motor_command(angle=0, speed=0)
+            self.actuator_pub.publish(stop_cmd)
+            return
+
+        # Spike 미감지 시, 다음 호출을 위해 이전값 업데이트
+        self.prev_target_x = curr_target_x
+
+
+        rospy.loginfo_throttle(1.0, "Motion: Lane following")
         try:
             motor_cmd = self.lane_controller.lane_following_control()
             self.actuator_pub.publish(motor_cmd)
@@ -72,6 +141,7 @@ class Motion:
         except Exception as e:
             rospy.logerr(f"Lane following error: {e}")
             self.emergency_stop()
+
 
      
     def traffic_light(self):
