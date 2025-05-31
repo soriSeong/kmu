@@ -147,7 +147,7 @@ class LaneDrivingController:
         self.lane_curvature = msg.data
 
     def pose_callback(self, msg):
-        """차량 위치 업데이트 (절대좌표 -> 내부 저장용)"""
+        """차량 위치 업데이트 (절대좌표)"""
         if self.ego:
             self.ego.x = msg.pose.position.x
             self.ego.y = msg.pose.position.y
@@ -175,14 +175,18 @@ class LaneDrivingController:
         base_speed = TARGET_SPEED
         curvature_abs = abs(self.lane_curvature)
         # 곡률 기준 속도 조정 (상대좌표 기준 임계값)
-        if curvature_abs > 500000:      # 매우 급한 커브
-            return base_speed * 0.2
-        elif curvature_abs > 200000:    # 급한 커브  
-            return base_speed * 0.3
-        elif curvature_abs < 200000:    
+        if curvature_abs > 1000000:  # 곡선이 튀거나 엄청 급한 커브
+            return base_speed * 0.15
+        if curvature_abs > 700000:      # 매우 급한 커브
+            return base_speed * 0.25
+        elif curvature_abs > 500000:    # 급한 커브  
+            return base_speed * 0.35
+        elif curvature_abs < 300000:    
             return base_speed * 0.5
+        elif curvature_abs < 200000:    # 일반 커브
+            return base_speed * 0.6
         else:                           # 직선 구간
-            return base_speed
+            return base_speed   
 
     def smooth_steering_relative(self, new_steer):
         """상대좌표 기준 조향각 부드럽게 급변하는 것을 방지"""
@@ -233,14 +237,22 @@ class LaneDrivingController:
 
             # 곡률 기반 조향 보정 (방향 고려)
             curvature_gain = 0.0
-            if self.lane_curvature > 500000:  # 매우 급한 커브
+            if self.lane_curvature > 700000:  # 매우 급한 커브
+                base_gain = self.lane_curvature / 700000.0
+                curvature_gain = base_gain * self.curve_direction  # 방향 적용
+                curvature_gain = np.clip(curvature_gain, -20.0, 20.0)
+            elif self.lane_curvature > 500000:  # 급한 커브
                 base_gain = self.lane_curvature / 500000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
-                curvature_gain = np.clip(curvature_gain, -19.0, 19.0)
-            elif self.lane_curvature > 300000:  # 급한 커브
+                curvature_gain = np.clip(curvature_gain, -17.0, 17.0)
+            elif self.lane_curvature > 300000:  # 급한 커브2
                 base_gain = self.lane_curvature / 300000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용
-                curvature_gain = np.clip(curvature_gain, -15.0, 15.0)
+                curvature_gain = np.clip(curvature_gain, -14.0, 14.0)
+            elif self.lane_curvature > 200000:  # 급한 커브
+                base_gain = self.lane_curvature / 200000.0
+                curvature_gain = base_gain * self.curve_direction  # 방향 적용
+                curvature_gain = np.clip(curvature_gain, -12.0, 12.0)
             elif self.lane_curvature > 150000:  # 일반 커브
                 base_gain = self.lane_curvature / 150000.0
                 curvature_gain = base_gain * self.curve_direction  # 방향 적용

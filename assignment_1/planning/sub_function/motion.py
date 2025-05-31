@@ -55,8 +55,8 @@ class Motion:
         if hasattr(self.shared, 'cone_exit_done') and self.shared.cone_exit_done:
             rospy.loginfo("Cone exit motion: right turn + short forward")
             
-            transition_cmd = self.create_motor_command(angle=50, speed=7)
-            for _ in range(20):  # 2초간 (0.1s * 10)
+            transition_cmd = self.create_motor_command(angle=40, speed=7)
+            for _ in range(30):  # 2초간 (0.1s * 10)
                 self.actuator_pub.publish(transition_cmd)
                 rospy.sleep(0.1)
 
