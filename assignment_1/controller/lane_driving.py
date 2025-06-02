@@ -17,7 +17,7 @@ IMAGE_CENTER = 320  # 이미지 중심
 
 class LateralPIDRelative:
     """상대좌표 기준 횡방향 PID 제어기"""
-    def __init__(self, kp=1.9, ki=0.03, kd=0.4, dt=0.05):
+    def __init__(self, kp=1.5, ki=0.05, kd=0.2, dt=0.05):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -176,7 +176,7 @@ class LaneDrivingController:
         curvature_abs = abs(self.lane_curvature)
         # 곡률 기준 속도 조정 (상대좌표 기준 임계값)
         if curvature_abs > 1000000:  # 곡선이 튀거나 급한 커브
-            return base_speed * 0.2
+            return base_speed * 0.3
         if curvature_abs > 700000:      # 매우 급한 커브
             return base_speed * 0.4
         elif curvature_abs > 500000:    # 급한 커브  

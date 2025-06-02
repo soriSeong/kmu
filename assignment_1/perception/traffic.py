@@ -82,19 +82,19 @@ class TrafficLightDetector:
         yellow_mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
         if cv2.countNonZero(red_mask) > 0:
-            rospy.loginfo("🔴 Red light detected")
+            rospy.loginfo("Red light detected")
             self.traffic_pub.publish(Bool(data=False))
 
         elif cv2.countNonZero(green_mask) > 0:
-            rospy.loginfo("🟢 Green light detected")
+            rospy.loginfo("Green light detected")
             self.traffic_pub.publish(Bool(data=True))
 
         elif cv2.countNonZero(yellow_mask) > 0:
-            rospy.loginfo("🟡 Yellow light detected")
+            rospy.loginfo("Yellow light detected")
             self.traffic_pub.publish(Bool(data=False))  # Yellow → 기본적으로 정지 처리
 
         else:
-            rospy.logwarn("⚠️ No clear traffic light detected")
+            rospy.logwarn("No clear traffic light detected")
             self.traffic_pub.publish(Bool(data=True))
 
 
