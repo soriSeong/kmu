@@ -16,6 +16,7 @@ class Perception:
         self.cone_list = []
         # 차량 감지
         self.vehicle_list = []
+
         rospy.Subscriber("/traffic_sign",Bool,self.traffic_light_callback)
 
         rospy.Subscriber("/mid_line_marker_array", MarkerArray, self.middle_path_callback)

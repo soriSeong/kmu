@@ -14,12 +14,10 @@ class Shared:
         self.perception = Perception()
 
         # for planner
-        self.global_path = Path()  
-        self.local_path = Path()
         self.plan = Plan()
 
         # for traffic light
-        self.traffic_light = False
+        self.traffic_light = Traffic_light()
 
         # 보조 로직 라바콘 탈출 후 사용
         self.cone_exit_done = False
