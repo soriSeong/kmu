@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rospy
 from xycar_msgs.msg import XycarMotor
 from std_msgs.msg import Header
@@ -5,41 +6,50 @@ from controller.frenet_controller import FrenetController
 from controller.lane_driving import LaneDrivingController
 from controller.cone_driving import ConeDrivingController
 
- # target_x 급격한 변화 감지 임계값 (픽셀 단위) 높을 수록 감지 민감도 낮아짐
+# target_x 급격한 변화 감지 임계값 (픽셀 단위) 높을수록 감지 민감도 낮아짐
 TARGETX_JUMP_THRESHOLD = 110
 # 후진 속도 및 지속 시간 설정
-STOP_DURATION = 0.1       # Spike 발생 시 먼저 얼만큼 정지할지
-REVERSE_SPEED = -8     # 후진 속도
-REVERSE_DURATION = 1.5  # 후진 지속 시간(초)
+STOP_DURATION = 0.1       # Spike 발생 시 먼저 정지할 시간(초)
+REVERSE_SPEED = -8        # 후진 속도
+REVERSE_DURATION = 1.5    # 후진 지속 시간(초)
 
 class Motion:
     def __init__(self, shared):
+        """
+        생성자
+        - shared: Shared 객체에서 ego, perception, plan 객체를 가져옴
+        - lane_controller: 차선 주행용 컨트롤러 인스턴스
+        - cone_controller: 라바콘 회피용 컨트롤러 인스턴스
+        
+        - prev_target_x: Spike 감지를 위한 이전 프레임의 target_x 저장 
+
+        - reverse_end_time: 후진 모드 종료 시간 (None이면 후진 중 아님)
+        - stop_end_time: Spike 발생 시 정지 모드 종료 시간 (None이면 정지 중 아님)
+        - actuator_pub: '/xycar_motor' 토픽 퍼블리셔 (XycarMotor 메시지 발행한다.)
+        """
         self.shared = shared
         self.plan = shared.plan
         self.ego = shared.ego
         self.perception = shared.perception
         
-        # 상대좌표 기준 컨트롤러들 초기화
-        self.frenet_controller = FrenetController()
+        # 컨트롤러 초기화
         self.lane_controller = LaneDrivingController(shared)
         self.cone_controller = ConeDrivingController(shared)
 
-        # Spike 감지를 위한 이전 target_x 저장 변수
         self.prev_target_x = None
-
-        # 후진 모드 관리 변수: None이면 후진 중 아님    
         self.reverse_end_time = None
-
-        # Spike 발생시 정지
         self.stop_end_time = None
-
-        # 모터 제어 퍼블리셔
         self.actuator_pub = rospy.Publisher('/xycar_motor', XycarMotor, queue_size=10)
         
         rospy.loginfo("Motion controller initialized (Relative Coordinate System)")
-    
+
     def create_motor_command(self, angle, speed):
-        """모터 명령 생성 유틸리티"""
+        """
+        모터 제어 메시지 생성
+        1. XycarMotor 메시지 객체 생성
+        2. Header 설정 (ros 시간, frame_id="map")
+        3. angle, speed 설정 후 반환
+        """
         motor_msg = XycarMotor()
         motor_msg.header = Header()
         motor_msg.header.stamp = rospy.Time.now()
@@ -49,27 +59,47 @@ class Motion:
         return motor_msg
     
     def target_control(self, speed):
-        """기본 속도 제어 (직진)"""
+        """
+        기본 속도 제어(직진)
+        1. ego.target_speed 갱신 (ego 객체는 Shared에서 가져옴)
+        2. 조향 각도 0으로 모터 메시지 생성 및 발행
+
+        신호등 초록불일 때 사용
+        """
         if self.ego:
             self.ego.target_speed = int(speed)
         
-        motor_msg = self.create_motor_command(0, speed)  # 직진
+        motor_msg = self.create_motor_command(0, speed)
         self.actuator_pub.publish(motor_msg)
      
     def stop(self):
-        """정지"""
+        """
+        정지 모드
+        1. 로그 출력("Motion: Stop")
+        2. 조향 0, 속도 0인 모터 메시지 생성 및 발행
+        """
         rospy.loginfo("Motion: Stop")
         motor_msg = self.create_motor_command(0, 0)
         self.actuator_pub.publish(motor_msg)
      
     def go(self):
-        """차선 기반 주행 + spike 감지 → 정지 → 후진 → 정상 복귀"""
+        """
+        기본적인 차선 인식 기반 주행, 
+        Spike 감지 시 -> 정지 -> 후진 -> 정상 복귀
+
+        - cone_exit_done 플래그가 True이면 라바콘 회피 종료 후 차선 복귀 동작(우회전 + 전진) 수행
+
+        --- spike 발생 시 로직 ---
+        - stop_end_time이 설정되어 있으면 정지 모드 유지 (속도=0)
+        - reverse_end_time이 설정되어 있으면 후진 모드 유지 (속도=REVERSE_SPEED)
+        - Spike 감지: lane_controller.target_x와 prev_target_x 차이 > 임계값이면 stop_end_time 설정 후 정지
+        - Spike 미감지 시 lane_following_control 호출하여 차선 주행 명령 생성 및 발행
+        """
         rospy.loginfo("Motion: Lane following")
         now = rospy.Time.now()
 
-        # 콘 주행 직후 한 번만 실행할 조향 + 전진
+        # 라바콘 회피 종료 후 차선 복귀 동작
         if hasattr(self.shared, 'cone_exit_done') and self.shared.cone_exit_done:
-            rospy.loginfo("Cone exit motion: right turn + short forward")
             transition_cmd = self.create_motor_command(angle=40, speed=7)
             for _ in range(30):  # 약 3초간 (0.1s * 30)
                 self.actuator_pub.publish(transition_cmd)
@@ -78,43 +108,31 @@ class Motion:
             self.shared.cone_exit_done = False
             return
 
-        # STEP1: 정지 모드 처리: stop_end_time이 None이 아니면 먼저 정지만 수행
         if self.stop_end_time is not None:
             if now < self.stop_end_time:
-                # 아직 정지 유지 시간(0.3초) 이내 → 계속 정지(속도=0)
-                rospy.logwarn_throttle(1.0, "Stopping (preparing to reverse) ...")
                 stop_cmd = self.create_motor_command(angle=0, speed=0)
                 self.actuator_pub.publish(stop_cmd)
                 return
             else:
-                # 정지 시간이 끝난 시점 → 정지 모드 해제, 후진 모드 진입
-                rospy.loginfo("Stop complete. Entering reverse mode.")
                 self.stop_end_time = None
                 self.reverse_end_time = now + rospy.Duration(REVERSE_DURATION)
                 rev_cmd = self.create_motor_command(angle=0, speed=REVERSE_SPEED)
                 self.actuator_pub.publish(rev_cmd)
                 return
 
-        # STEP2: 후진 모드 처리: reverse_end_time이 None이 아니면 계속 후진
         if self.reverse_end_time is not None:
             if now < self.reverse_end_time:
-                # 아직 후진 유지 시간이내 계속 후진
-                rospy.logwarn_throttle(1.0, "Reversing (due to target_x spike) ...")
                 rev_cmd = self.create_motor_command(angle=0, speed=REVERSE_SPEED)
                 self.actuator_pub.publish(rev_cmd)
                 return
             else:
-                # 후진 시간이 끝난 시점 → 후진 모드 해제, prev_target_x 초기화
-                rospy.loginfo("Reversing complete. Resuming normal lane follow.")
                 self.reverse_end_time = None
                 self.prev_target_x = None
-                # 마지막으로 한 번 더 후진 명령을 보내고 return
                 rev_cmd = self.create_motor_command(angle=0, speed=REVERSE_SPEED)
                 self.actuator_pub.publish(rev_cmd)
                 return
 
-        # STEP3: Spike 감지 (target_x 급격한 변화만 사용)
-        curr_target_x = self.lane_controller.target_x
+        curr_target_x = self.lane_controller.target_x  # LaneDrivingController에서 유지되는 값
         jump_detected = False
 
         if self.prev_target_x is not None:
@@ -122,16 +140,16 @@ class Motion:
                 jump_detected = True
 
         if jump_detected:
-            rospy.logwarn(f"Spike detected! Δtarget_x={abs(curr_target_x - self.prev_target_x)} > {TARGETX_JUMP_THRESHOLD}")
-            # Spike 발생 시, 먼저 정지 모드 진입 (0.3초 동안)
+            delta = abs(curr_target_x - self.prev_target_x)
+            rospy.logwarn(f"Spike detected! Δtarget_x={delta} > {TARGETX_JUMP_THRESHOLD}")
+            # Spike 발생 시 정지 모드 진입 (STOP_DURATION 동안)
             self.stop_end_time = now + rospy.Duration(STOP_DURATION)
             stop_cmd = self.create_motor_command(angle=0, speed=0)
             self.actuator_pub.publish(stop_cmd)
             return
 
-        # Spike 미감지 시, 다음 호출을 위해 이전값 업데이트
+        # Spike 미감지 시, 다음 호출을 위해 이전 target_x 값 업데이트
         self.prev_target_x = curr_target_x
-
 
         rospy.loginfo_throttle(1.0, "Motion: Lane following")
         try:
@@ -140,62 +158,68 @@ class Motion:
             rospy.sleep(0.1)
         except Exception as e:
             rospy.logerr(f"Lane following error: {e}")
-            self.emergency_stop()
 
-    def traffic_light(self):
-        """신호등 제어"""
-        # perception에서 신호등 정보 가져오기
+    def traffic_light_decision(self):
+        """
+        신호등 제어
+        perception.traffic_light 속성(True=초록불, False=빨간불 or 노란불) 참조
+        빨간불 or 노란불(False) -> stop() 호출
+        초록불(True) → target_control(35) 호출 (직진 속도 35)
+        """
         traffic_light_state = self.perception.traffic_light
         
-        if traffic_light_state == False:  # 빨간불 또는 황색불
+        if traffic_light_state is False:  # 빨간불 또는 노란불
             rospy.loginfo("Traffic light: RED")
             self.stop()
-        elif traffic_light_state == True:  # 초록불
+        else:  # 초록불 또는 기타 (True 기준)
             rospy.loginfo("Traffic light: GREEN")
             self.target_control(35)
-        else:
-            self.target_control(35)
-     
+
     def obs_small(self):
-        """작은 장애물 회피 - 라바콘 (상대좌표 기준으로 추종)"""
-        rospy.loginfo("Motion: Small obstacle avoidance)")
+        """
+        작은 장애물 회피 - 라바콘 (상대좌표 기준) 라이다에서 넘겨주는 middle path를 활용해 라바콘을 회피한다.
+        cone_controller.follow_cone_path() 호출해 조향/속도 명령 반환 여부 확인
+        명령이 있으면 발행, 향후 한 번만 실행할 전환 플래그(cone_exit_done) 설정
+        명령이 없으면 라바콘 회피 완료로 간주, plan.motion_decision = "go" 설정
+        """
+        rospy.loginfo("Motion: Small obstacle avoidance")
         try:
             motor_cmd = self.cone_controller.follow_cone_path()
 
             if motor_cmd:
                 self.actuator_pub.publish(motor_cmd)
-                if not self.shared.cone_exit_done :
-                    self.shared.cone_exit_done  = True
+                if not getattr(self.shared, 'cone_exit_done', False):
+                    self.shared.cone_exit_done = True
             else:
                 rospy.loginfo("Cone driving finished, preparing to transition to go")
-                
                 self.plan.motion_decision = "go"
 
         except Exception as e:
             rospy.logerr(f"Cone driving error: {e}")
-            self.target_control(10)  # 더 감속
-
+            # 오류 시 속도를 10으로 감속하여 직진
+            self.target_control(10)
 
     def obs_big(self):
-        """차량 회피 - Optimal Frenet (상대좌표 기준)"""
+        """
+
+        """
         rospy.loginfo("Motion: Large obstacle avoidance (Relative Coordinate)")
         
-        # Frenet 경로가 생성되었는지 확인
-        path = self.shared.local_path
+        path = getattr(self.shared, 'local_path', None)
         if not path or not hasattr(path, 'x') or len(path.x) < 2:
             rospy.logwarn("No valid Frenet path")
             self.target_control(35)
             return
 
         try:
-            # 현재 차량 상태
+            # 현재 차량 상태 가져오기 (Shared.ego에서)
             ego_x = self.ego.x if self.ego else 0
             ego_y = self.ego.y if self.ego else 0
             ego_yaw = self.ego.yaw if self.ego else 0
             ego_speed = self.ego.speed if self.ego else 5
             ego_steer = self.ego.steer if self.ego else 0
             
-            # 상대좌표 기준 Frenet 경로 추종
+            # Frenet 경로 추종: FrenetController 모듈 사용
             motor_commands = self.frenet_controller.follow_frenet_path(
                 path,
                 ego_x=ego_x,
@@ -209,64 +233,12 @@ class Motion:
                 # 생성된 제어 명령들을 순차적으로 발행
                 for cmd in motor_commands:
                     self.actuator_pub.publish(cmd)
-                    rospy.sleep(0.05)  # 짧은 간격으로 발행
-                    
+                    rospy.sleep(0.05)
                 rospy.loginfo("Frenet path following commands sent (Relative)")
             else:
                 rospy.logwarn("No valid control messages from Frenet controller")
-                self.stop()  # 정지
+                self.stop()
                 
         except Exception as e:
             rospy.logerr(f"Frenet path following error: {e}")
-            self.stop()  # 오류 시 정지
-
-    def emergency_stop(self):
-        """비상 정지"""
-        rospy.logwarn("Emergency stop activated!")
-        
-        # 비상 정지 메시지 (브레이크)
-        emergency_msg = self.create_motor_command(0, -10)
-        
-        # 여러 번 발행하여 확실히 정지
-        for _ in range(5):
-            self.actuator_pub.publish(emergency_msg)
-            rospy.sleep(0.1)
-        
-        # 완전 정지
-        final_stop = self.create_motor_command(0, 0)
-        self.actuator_pub.publish(final_stop)
-
-    def get_current_state(self):
-        """현재 상태 반환 (상대좌표 기준)"""
-        if self.ego:
-            return {
-                'coordinate_system': 'relative',
-                'position': (self.ego.x, self.ego.y),  # 절대좌표 (참조용)
-                'yaw': self.ego.yaw,
-                'speed': self.ego.speed,
-                'steer': self.ego.steer,
-                'controllers': {
-                    'lane_status': self.lane_controller.get_status_relative(),
-                    'cone_status': self.cone_controller.get_status(),
-                    'frenet_active': hasattr(self.shared, 'local_path') and self.shared.local_path is not None
-                }
-            }
-        else:
-            return {
-                'coordinate_system': 'relative',
-                'error': 'No ego vehicle state available'
-            }
-
-    def get_active_controller(self):
-        if self.plan.motion_decision == "go":
-            return "lane_controller"
-        elif self.plan.motion_decision == "obs_small":
-            return "cone_controller"
-        elif self.plan.motion_decision == "obs_big":
-            return "frenet_controller"
-        elif self.plan.motion_decision == "traffic_light":
-            return "traffic_light_controller"
-        elif self.plan.motion_decision == "stop":
-            return "stop_controller"
-        else:
-            return "unknown"
+            self.stop()
