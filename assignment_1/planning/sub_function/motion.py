@@ -5,8 +5,8 @@ from controller.frenet_controller import FrenetController
 from controller.lane_driving import LaneDrivingController
 from controller.cone_driving import ConeDrivingController
 
-TARGETX_JUMP_THRESHOLD = 110 # target_x 급격한 변화 감지 임계값 (픽셀 단위) 높을 수록 감지 민감도 낮아짐
-
+ # target_x 급격한 변화 감지 임계값 (픽셀 단위) 높을 수록 감지 민감도 낮아짐
+TARGETX_JUMP_THRESHOLD = 110
 # 후진 속도 및 지속 시간 설정
 STOP_DURATION = 0.1       # Spike 발생 시 먼저 얼만큼 정지할지
 REVERSE_SPEED = -8     # 후진 속도
@@ -142,8 +142,6 @@ class Motion:
             rospy.logerr(f"Lane following error: {e}")
             self.emergency_stop()
 
-
-     
     def traffic_light(self):
         """신호등 제어"""
         # perception에서 신호등 정보 가져오기
@@ -258,19 +256,6 @@ class Motion:
                 'coordinate_system': 'relative',
                 'error': 'No ego vehicle state available'
             }
-
-    def reset_all_controllers(self):
-        """모든 제어기 상태 초기화"""
-        rospy.loginfo("Resetting all controllers to relative coordinate system")
-        
-        # 각 컨트롤러 리셋
-        if hasattr(self.lane_controller, 'reset_controller'):
-            self.lane_controller.reset_controller()
-        
-        if hasattr(self.frenet_controller, 'reset'):
-            self.frenet_controller.reset()
-        
-        rospy.loginfo("All controllers reset complete")
 
     def get_active_controller(self):
         if self.plan.motion_decision == "go":
