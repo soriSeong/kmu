@@ -19,11 +19,7 @@ class Shared:
         self.plan = Plan()
 
         # for traffic light
-        self.traffic_light = Traffic_light()
-
-        # for obstacle avoidance
-        self.obstacles = []
-        self.dangerous_obstacles = []
+        self.traffic_light = False
 
         # 보조 로직 라바콘 탈출 후 사용
         self.cone_exit_done = False
