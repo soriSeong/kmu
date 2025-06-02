@@ -5,9 +5,11 @@ from std_msgs.msg import Header
 from controller.frenet_controller import FrenetController
 from controller.lane_driving import LaneDrivingController
 from controller.cone_driving import ConeDrivingController
+from controller.lane_switcher import LaneSwitcher
 
 # target_x 급격한 변화 감지 임계값 (픽셀 단위) 높을수록 감지 민감도 낮아짐
 TARGETX_JUMP_THRESHOLD = 110
+
 # 후진 속도 및 지속 시간 설정
 STOP_DURATION = 0.1       # Spike 발생 시 먼저 정지할 시간(초)
 REVERSE_SPEED = -8        # 후진 속도
@@ -35,6 +37,7 @@ class Motion:
         # 컨트롤러 초기화
         self.lane_controller = LaneDrivingController(shared)
         self.cone_controller = ConeDrivingController(shared)
+        self.lane_switcher = LaneSwitcher(shared)
 
         self.prev_target_x = None
         self.reverse_end_time = None
@@ -171,7 +174,7 @@ class Motion:
         if traffic_light_state is False:  # 빨간불 또는 노란불
             rospy.loginfo("Traffic light: RED")
             self.stop()
-        else:  # 초록불 또는 기타 (True 기준)
+        else:
             rospy.loginfo("Traffic light: GREEN")
             self.target_control(35)
 
@@ -201,44 +204,17 @@ class Motion:
 
     def obs_big(self):
         """
-
+        LaneSwitcher를 사용한 차량 회피
         """
-        rospy.loginfo("Motion: Large obstacle avoidance (Relative Coordinate)")
-        
-        path = getattr(self.shared, 'local_path', None)
-        if not path or not hasattr(path, 'x') or len(path.x) < 2:
-            rospy.logwarn("No valid Frenet path")
-            self.target_control(35)
+        rospy.loginfo("Vehicle avoidance using LaneSwitcher")
+
+        # 좌/우 차선 장애물 리스트를 Boolean 으로 판별
+        left_has_obs  = len(self.shared.perception.left_obstacles)  > 0
+        right_has_obs = len(self.shared.perception.right_obstacles) > 0
+
+        # LaneSwitcher 가 True 반환 시, 내부에서 정지 또는 차선 전환 명령을 퍼블리시 했으므로 제어 위임 끝
+        if self.lane_switcher.update(left_has_obs, right_has_obs):
             return
 
-        try:
-            # 현재 차량 상태 가져오기 (Shared.ego에서)
-            ego_x = self.ego.x if self.ego else 0
-            ego_y = self.ego.y if self.ego else 0
-            ego_yaw = self.ego.yaw if self.ego else 0
-            ego_speed = self.ego.speed if self.ego else 5
-            ego_steer = self.ego.steer if self.ego else 0
-            
-            # Frenet 경로 추종: FrenetController 모듈 사용
-            motor_commands = self.frenet_controller.follow_frenet_path(
-                path,
-                ego_x=ego_x,
-                ego_y=ego_y,
-                yaw=ego_yaw,
-                speed=ego_speed,
-                steer_prev=ego_steer
-            )
-
-            if motor_commands:
-                # 생성된 제어 명령들을 순차적으로 발행
-                for cmd in motor_commands:
-                    self.actuator_pub.publish(cmd)
-                    rospy.sleep(0.05)
-                rospy.loginfo("Frenet path following commands sent (Relative)")
-            else:
-                rospy.logwarn("No valid control messages from Frenet controller")
-                self.stop()
-                
-        except Exception as e:
-            rospy.logerr(f"Frenet path following error: {e}")
-            self.stop()
+        # 회피 모드가 아닌 경우에는 일단 정지(또는 다른 기본 동작)
+        self.stop()

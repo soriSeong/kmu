@@ -53,13 +53,10 @@ class MotionPlanner(threading.Thread):
                     self.motion.obs_small()
 
                 elif self.plan.motion_decision == "obs_big":
-                    optimal_path = self.generate_frenet_path()
-                    self.shared.local_path = optimal_path
                     self.motion.obs_big()
 
             except IndexError:
                 print("++++++++motion_planner+++++++++")
-
             sleep(self.period)
     
     def publish_frenet_path(self, frenet_path):
