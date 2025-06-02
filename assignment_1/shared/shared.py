@@ -1,11 +1,12 @@
 from .ego import Ego
 from .perception import Perception
-from .path import Path
 from .plan import Plan
-from .traffic_light import Traffic_light
 
 
 class Shared:
+    """
+    공유되는 상태 객체
+    """
     def __init__(self):
 
         self.ego = Ego()
@@ -16,8 +17,3 @@ class Shared:
         # for planner
         self.plan = Plan()
 
-        # for traffic light
-        self.traffic_light = Traffic_light()
-
-        # 보조 로직 라바콘 탈출 후 사용
-        self.cone_exit_done = False
