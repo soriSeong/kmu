@@ -7,7 +7,7 @@ V_MAX = 100      # 최대 속도 [m/s]
 ACC_MAX = 100    # 최대 가속도 [m/s²]
 K_MAX = 100      # 최대 곡률 [1/m]
 
-TARGET_SPEED = 10  # 목표 속도 [m/s]
+TARGET_SPEED = 20  # 목표 속도 [m/s]
 LANE_WIDTH = 4     # 차선 폭 [m]
 
 COL_CHECK = 0.25   # 충돌 검사 거리 [m]
