@@ -78,6 +78,8 @@ using namespace std;
 
     void PC2_to_markerArray(const pcl::PointCloud<PointType>::Ptr& input_pointCloud, const std::shared_ptr<visualization_msgs::MarkerArray>& markerarray);
 
+    void addMarkerToArray(std::shared_ptr<visualization_msgs::MarkerArray>& markerArray,const pcl::PointCloud<PointType>::Ptr& cluster,const std::string& frame_id,float r, float g, float b);
+
     // 카메라 파라미터 구조체
     struct ParamsLidar {
         double X = 0.0;

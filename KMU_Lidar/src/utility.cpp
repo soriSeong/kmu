@@ -78,7 +78,7 @@
             marker.scale.y = 0.05;
             marker.scale.z = 0.05;
 
-            // 마커 색상 설정 (예시로 파란색 사용)
+            // 마커 색상 설정 (파란색)
             marker.color.r = 0.0f;
             marker.color.g = 1.0f;
             marker.color.b = 0.0f;
@@ -89,6 +89,39 @@
             markerarray->markers.push_back(marker);
         }
     }
+
+    //클러스터 중심에 마커 표시
+    
+    void addMarkerToArray(std::shared_ptr<visualization_msgs::MarkerArray>& markerArray,
+                        const pcl::PointCloud<PointType>::Ptr& cluster,
+                        const std::string& frame_id, float r, float g, float b) 
+    {
+        Eigen::Vector4f centroid;
+        pcl::compute3DCentroid(*cluster, centroid);
+
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = frame_id;
+        marker.header.stamp = ros::Time::now();
+        marker.ns = "car_cluster";
+        marker.id = 0;  // 여기서는 임시 ID. 나중에 main 코드에서 일괄 재지정
+        marker.type = visualization_msgs::Marker::SPHERE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.position.x = centroid[0];
+        marker.pose.position.y = centroid[1];
+        marker.pose.position.z = centroid[2];
+        marker.scale.x = 0.4;
+        marker.scale.y = 0.4;
+        marker.scale.z = 0.4;
+        marker.color.r = r;
+        marker.color.g = g;
+        marker.color.b = b;
+        marker.color.a = 1.0f;
+        marker.lifetime = ros::Duration(0.1);
+
+        markerArray->markers.push_back(marker);
+    }
+
+
 
 
 // 서브 프로세스

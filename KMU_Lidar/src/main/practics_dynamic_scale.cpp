@@ -86,7 +86,7 @@ private:
 // ros::publisher
     ros::Publisher pubLaserCloudIn; // prototype pointCloud
 
-    //동적장애물
+    //
     ros::Publisher pubEmergencySign;
     std_msgs::Bool emergency;
     ros::Publisher pubEmergencyCloud;
@@ -106,26 +106,16 @@ private:
     ros::Publisher pubROIMarkerArray;
     ros::Publisher pubMidLineMarkerArray;
 
-    //정적장애물
+    //차량
     ros::Publisher pubStaticCloud;
     ros::Publisher pubStaticMarkerArray;
     ros::Publisher pubStaticBboxArray;
 
-    //터널
-    // ros::Publisher pubLeftTCloud;
-    // ros::Publisher pubRightTCloud;
-    // ros::Publisher pubCenterPoint;
+    ros::Publisher pubLeftCarCloud;
+    ros::Publisher pubRightCarCloud;
+    ros::Publisher pubLeftCarMarkerArray;
+    ros::Publisher pubRightCarMarkerArray;
 
-    //교차로
-    // ros::Publisher pubCrossCloud;
-    // ros::Publisher pubAllowSign;
-    // ros::Publisher pubDirecSign;
-    // ros::Publisher pubLen;
-    // std_msgs::Bool allow;
-    // float loc;
-    // std_msgs::Bool direc;
-    // std_msgs::Float32 len;
-    // ros::Publisher pubLenCloud;
 
 // rosMsg
     std::shared_ptr<sensor_msgs::PointCloud2> rosCloud;
@@ -134,7 +124,7 @@ private:
     // pointCLoud 원본
     pcl::PointCloud<PointType>::Ptr laserCloudIn;
 
-    //동적장애물
+    //Emergency
     pcl::PointCloud<PointType>::Ptr emergencyCloud;
 
     //콘주행
@@ -146,17 +136,8 @@ private:
     pcl::PointCloud<PointType>::Ptr coneROICloud;
     pcl::PointCloud<PointType>::Ptr midLineCloud;
 
-    //정적장애물
+    //차량
     pcl::PointCloud<PointType>::Ptr staticCloud;
-
-    //터널
-    // pcl::PointCloud<PointType>::Ptr leftTCloud;
-    // pcl::PointCloud<PointType>::Ptr rightTCloud;
-    // pcl::PointCloud<PointType>::Ptr centerPointCloud;
-
-    //교차로
-    // pcl::PointCloud<PointType>::Ptr crossCloud;
-    // pcl::PointCloud<PointType>::Ptr lenCloud;
 
     //콘주행
     std::shared_ptr<visualization_msgs::MarkerArray> LConeLineMarkerArray = std::make_shared<visualization_msgs::MarkerArray>();
@@ -164,12 +145,17 @@ private:
     std::shared_ptr<visualization_msgs::MarkerArray> ROIMarkerArray = std::make_shared<visualization_msgs::MarkerArray>();
     std::shared_ptr<visualization_msgs::MarkerArray> MidLineMarkerArray = std::make_shared<visualization_msgs::MarkerArray>();
 
-    //정적장애물
+    //차량
     std::shared_ptr<visualization_msgs::MarkerArray> staticMarkerArray = std::make_shared<visualization_msgs::MarkerArray>();
     std::shared_ptr<visualization_msgs::MarkerArray> staticBboxArray = std::make_shared<visualization_msgs::MarkerArray>();
 
     std::shared_ptr<std::vector<pcl::PointCloud<PointType>::Ptr>> static_Cloud_vector = std::make_shared<std::vector<pcl::PointCloud<PointType>::Ptr>>();
 
+    pcl::PointCloud<PointType>::Ptr leftCarCloud;
+    pcl::PointCloud<PointType>::Ptr rightCarCloud;
+    std::shared_ptr<visualization_msgs::MarkerArray> leftCarMarkerArray = std::make_shared<visualization_msgs::MarkerArray>();
+    std::shared_ptr<visualization_msgs::MarkerArray> rightCarMarkerArray = std::make_shared<visualization_msgs::MarkerArray>();
+    
     static laser_geometry::LaserProjection projector;
 
     Preprocessor preprocessor;
@@ -181,7 +167,7 @@ public:
         // Publish할 토픽 설정
         pubLaserCloudIn = nh.advertise<sensor_msgs::PointCloud2>("/laserCloudIn", 1);
 
-        //동적장애물
+        //Emergency
         pubEmergencySign = nh.advertise<std_msgs::Bool>("/emergency_sign", 1);
         pubEmergencyCloud = nh.advertise<sensor_msgs::PointCloud2>("/emergency_cloud", 1);
 
@@ -200,24 +186,16 @@ public:
         pubRConeLineMarkerArray = nh.advertise<visualization_msgs::MarkerArray>("/Rcone_line_marker_array", 1);
         pubROIMarkerArray = nh.advertise<visualization_msgs::MarkerArray>("/tunnel_mid_marker_array", 1);
 
-        //정적장애물
+        //차량
         pubStaticCloud = nh.advertise<sensor_msgs::PointCloud2>("/static_cloud", 1);
         pubStaticMarkerArray = nh.advertise<visualization_msgs::MarkerArray>("/static_markers", 1);
         pubStaticBboxArray = nh.advertise<visualization_msgs::MarkerArray>("/static_markers_vis", 1);
 
-        //터널
-        // pubLeftTCloud = nh.advertise<sensor_msgs::PointCloud2>("/left_T_cloud", 1);
-        // pubRightTCloud = nh.advertise<sensor_msgs::PointCloud2>("/right_T_cloud", 1);
-        
-        // pubCenterPoint = nh.advertise<sensor_msgs::PointCloud2>("/center_point_cloud", 1);
+        pubLeftCarCloud = nh.advertise<sensor_msgs::PointCloud2>("/left_car_cloud", 1);
+        pubRightCarCloud = nh.advertise<sensor_msgs::PointCloud2>("/right_car_cloud", 1);
+        pubLeftCarMarkerArray = nh.advertise<visualization_msgs::MarkerArray>("/left_car_marker_array", 1);
+        pubRightCarMarkerArray = nh.advertise<visualization_msgs::MarkerArray>("/right_car_marker_array", 1);
 
-        //교차로
-        // pubCrossCloud = nh.advertise<sensor_msgs::PointCloud2>("/cross_cloud", 1);
-        // pubAllowSign = nh.advertise<std_msgs::Bool>("/allow_sign", 1);
-        // allow.data = false;
-        // pubDirecSign = nh.advertise<std_msgs::Bool>("/direc_sign", 1);
-        // pubLen = nh.advertise<std_msgs::Float32>("/len_value", 10);
-        // pubLenCloud = nh.advertise<sensor_msgs::PointCloud2>("/len_cloud", 1);
 
         // Subscribe할 토픽 설정
         subLidar = nh.subscribe("/scan", 10, &ImageProjection::cloudHandler, this);
@@ -232,7 +210,7 @@ public:
     void allocateMemory(){
         laserCloudIn.reset(new pcl::PointCloud<PointType>());
 
-        //동적장애물
+        //Emergency
         emergencyCloud.reset(new pcl::PointCloud<PointType>());
 
         //콘주행
@@ -244,17 +222,11 @@ public:
         RconeCloud.reset(new pcl::PointCloud<PointType>());
         midLineCloud.reset(new pcl::PointCloud<PointType>());
 
-        //정적장애물
+        //차량
         staticCloud.reset(new pcl::PointCloud<PointType>());
+        leftCarCloud.reset(new pcl::PointCloud<PointType>());
+        rightCarCloud.reset(new pcl::PointCloud<PointType>());
 
-        //터널
-        // leftTCloud.reset(new pcl::PointCloud<PointType>());
-        // rightTCloud.reset(new pcl::PointCloud<PointType>());
-        // centerPointCloud.reset(new pcl::PointCloud<PointType>());
-
-        //교차로
-        // crossCloud.reset(new pcl::PointCloud<PointType>());
-        // lenCloud.reset(new pcl::PointCloud<PointType>());
 
         rosCloud = std::make_shared<sensor_msgs::PointCloud2>();
     }
@@ -263,18 +235,13 @@ public:
         laserCloudIn->clear();
         rosCloud->data.clear();
 
-        //동적장애물
+        //Emergency
         emergencyCloud->clear();
         
-        //정적장애물
+        //차량
         staticCloud->clear();
         deleteAllMarkers(staticMarkerArray);
         static_Cloud_vector->clear();
-
-        //터널
-        // leftTCloud->clear();
-        // rightTCloud->clear();
-        // centerPointCloud->clear();
 
         //콘주행
         coneClusterCloud->clear();
@@ -284,15 +251,15 @@ public:
         RconeCloud->clear();
         coneROICloud->clear();
         midLineCloud->clear();
-
-        //교차로
-        // crossCloud->clear();
-        // lenCloud->clear();
+        leftCarCloud->clear();
+        rightCarCloud->clear();
 
         deleteAllMarkers(LConeLineMarkerArray);
         deleteAllMarkers(RConeLineMarkerArray);
         deleteAllMarkers(ROIMarkerArray);
         deleteAllMarkers(MidLineMarkerArray);
+        deleteAllMarkers(leftCarMarkerArray);
+        deleteAllMarkers(rightCarMarkerArray);
     }
 
     // 라이다와 GPS만 작동시 진행
@@ -302,15 +269,10 @@ public:
         cout << "LiDAR is Working" << endl;
         projector.projectLaser(*rosLaser, *rosCloud,-1,laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
         pcl::fromROSMsg(*rosCloud, *laserCloudIn); //ROS msg(PointCloud2) -> PCL(PointCloud)
-        // Eigen::Affine3f transform = Eigen::Affine3f::Identity();
-        // transform.rotate(Eigen::AngleAxisf(M_PI, Eigen::Vector3f::UnitZ()));
-        // pcl::transformPointCloud(*laserCloudIn, *laserCloudIn, transform);
 
-        //saveCurrentTime(rosCloud);
         // 포인트 클라우드 가공 및 생성
         getPointCloud();
 
-        //cout << "Center Point: (" << centerPoint.x << ", " << centerPoint.y << ", " << centerPoint.z << ")" << endl;
         // 포인트 클라우드 publish
         publishPointCloud();
         // 데이터 초기화
@@ -339,7 +301,7 @@ public:
     }
 
     void getPointCloud(){
-        // 동적 장애물 / 차단기
+        // Emergency / 차단기
         pointCloudGenerator.getSectorROICloud(laserCloudIn, emergencyCloud, 0.3f, 5.0f, M_PI / 6);
         if (emergencyCloud->points.size() > 4)  emergency.data = true; //Emergency
         else                                    emergency.data = false; 
@@ -350,9 +312,6 @@ public:
 
         pointCloudGenerator.getBox(coneClusterCloud, LconeCloud, {1.5, 2.5}, 3.0, 5.0);
         pointCloudGenerator.getBox(coneClusterCloud, RconeCloud, {1.5, -2.5}, 3.0, 5.0);
-        //pointCloudGenerator.getLRconeCloud(coneClusterCloud, RconeCloud, LconeCloud, nullptr, nullptr, nullptr);
-
-        //pointCloudGenerator.getConeTrackerCloud(LconeCloud, RconeCloud, midLineCloud);
         
         if (!LconeCloud->empty() && !RconeCloud->empty()) {
             // 둘 다 있으면 정상적인 midLine 생성
@@ -375,56 +334,63 @@ public:
         PC2_to_markerArray(LconeCloud, LConeLineMarkerArray);
         PC2_to_markerArray(RconeCloud, RConeLineMarkerArray);
 
-        // 정적 장애물(차)
-        pointCloudGenerator.getInterestCloud(laserCloudIn, staticCloud, {0, 9.0}, {-3, 3}, {-0.1, 0.1}); // 전방 5m, 좌우 3m
+        // 차량
+        pointCloudGenerator.getInterestCloud(laserCloudIn, staticCloud, {0, 9.0}, {-6, 6}, {-0.1, 0.1}); // 전방 5m, 좌우 3m
         pointCloudGenerator.getCarCloud(staticCloud, static_Cloud_vector); //static_Cloud_vector 생성하기
+        
+        // 좌/우 차량 클라우드 초기화
+        leftCarCloud.reset(new pcl::PointCloud<PointType>());
+        rightCarCloud.reset(new pcl::PointCloud<PointType>());
+
+        // 좌/우로 차량 클러스터 구분
+        std::vector<std::pair<float, pcl::PointCloud<PointType>::Ptr>> clusters_with_y;
+        for (const auto& cluster : *static_Cloud_vector) {
+            if (cluster->empty()) continue;
+
+            Eigen::Vector4f centroid;
+            pcl::compute3DCentroid(*cluster, centroid);
+            clusters_with_y.emplace_back(centroid[1], cluster);
+        }
+
+        // y기준으로 오름차순 정렬 (왼쪽 → 오른쪽)
+        std::sort(clusters_with_y.begin(), clusters_with_y.end(),
+                [](const auto& a, const auto& b) {
+                    return a.first < b.first;
+                });
+
+        // 정렬된 결과를 반으로 나눠서 왼쪽/오른쪽 구분
+        size_t half = clusters_with_y.size() / 2;
+        size_t cluster_num = clusters_with_y.size();
+        for (size_t i = 0; i < cluster_num; ++i) {
+            const auto& cluster = clusters_with_y[i].second;
+            float y_val = clusters_with_y[i].first;
+
+            //차량 기준 장애물 차량이 오른쪽에 있으면 흰색, 왼쪽에 있으면 파란색으로 구분
+            // [예외 처리] 클러스터가 1개이고 y < 0이면 오른쪽으로 분류
+            if (cluster_num == 1 && y_val < 0.0f) {
+                *rightCarCloud += *cluster;
+                addMarkerToArray(rightCarMarkerArray, cluster, "map", 1.0f, 1.0f, 1.0f); // 흰색
+                continue;
+            }
+
+            // 기본 분할 로직
+            if (i < half) {
+                *leftCarCloud += *cluster;
+                addMarkerToArray(leftCarMarkerArray, cluster, "map", 1.0f, 1.0f, 1.0f); // 흰색
+            } else {
+                *rightCarCloud += *cluster;
+                addMarkerToArray(rightCarMarkerArray, cluster, "map", 0.0f, 0.0f, 1.0f); // 파란색
+            }
+        }
+
         pointCloudGenerator.getObjectMarkers(static_Cloud_vector, staticMarkerArray, staticBboxArray);
 
-        // 터널
-        // pointCloudGenerator.getInterestCloud(laserCloudIn, leftTCloud, {0.3, 0.4}, {0, 0.7}, {-0.1, 0.1});
-        // pointCloudGenerator.getInterestCloud(laserCloudIn, rightTCloud, {0.3, 0.4}, {-0.7, 0}, {-0.1, 0.1});
-        // calculateTunnelCenterPointCloud(leftTCloud, rightTCloud, centerPointCloud);
-        // PC2_to_markerArray(centerPointCloud, ROIMarkerArray);
-
-        // 회전 교차로
-        // pointCloudGenerator.getInterestCloud(laserCloudIn, crossCloud, {0.2, 0.8}, {-0.2, 0.2}, {-0.1, 0.1});
-        // if (crossCloud->points.size() > 0) { //검출될 시
-        //     loc = crossCloud->points[0].y;
-        //     allow.data = false;
-        // }
-        // else { //검출 안될 시
-        //     allow.data = true;
-        //     if (loc < 0) {
-        //         direc.data = true; // Right
-        //     }
-        //     else {
-        //         direc.data = false; // Left
-        //     }
-        // }
-
-        // cout << ((allow.data) ? "Pass now!" : "Waiting") << endl;
-        // cout << ((direc.data) ? " - Right" : " - Left") << endl;
-        
-        // pointCloudGenerator.getAngleCloud(laserCloudIn, lenCloud, {0.2, 1}, {-0.5, 0.5}, {-0.1, 0.1}, {-60, 60});
-        // if (lenCloud->points.size() > 0) {
-        //     PointType P; P.x=0; P.y=0; P.z=0;
-        //     for (PointType point:lenCloud->points){
-        //         P.x += point.x;
-        //         P.y += point.y;
-        //     }
-        //     P.x /= lenCloud->points.size();
-        //     P.y /= lenCloud->points.size();
-        //     len.data = std::sqrt(std::pow(P.x, 2) + std::pow(P.y, 2));
-        // }
-        // else {
-        //     len.data = -1;
-        // }
     }
 
     void publishPointCloud(){
         publisher(laserCloudIn, pubLaserCloudIn, "map");
 
-        //동적장애물
+        //Emergency
         pubEmergencySign.publish(emergency);
         publisher(emergencyCloud, pubEmergencyCloud, "map");
 
@@ -441,10 +407,14 @@ public:
         publisherMarkerArray(ROIMarkerArray, pubROIMarkerArray, "map");
         publisherMarkerArray(MidLineMarkerArray, pubMidLineMarkerArray, "map");
 
-        //정적장애물
+        //차량
         publisher(staticCloud, pubStaticCloud, "map");
         publisherMarkerArray(staticMarkerArray, pubStaticMarkerArray, "map");
         publisherMarkerArray(staticBboxArray, pubStaticBboxArray, "map");
+        publisher(leftCarCloud, pubLeftCarCloud, "map");
+        publisher(rightCarCloud, pubRightCarCloud, "map");
+        publisherMarkerArray(leftCarMarkerArray, pubLeftCarMarkerArray, "map");
+        publisherMarkerArray(rightCarMarkerArray, pubRightCarMarkerArray, "map");
 
         // 작은 장애물 (콘) 마커들 병합
         visualization_msgs::MarkerArray coneMarkers;
@@ -467,17 +437,14 @@ public:
         // 퍼블리시
         pubObsSmall.publish(coneMarkers);
 
-        //터널
-        // publisher(leftTCloud, pubLeftTCloud, "map");
-        // publisher(rightTCloud, pubRightTCloud, "map");
-        // publisher(centerPointCloud, pubCenterPoint, "map");
-
-        // 회전 교차로
-        // publisher(crossCloud, pubCrossCloud, "map");
-        // pubAllowSign.publish(allow);
-        // pubDirecSign.publish(direc);
-        // pubLen.publish(len);
-        // publisher(lenCloud, pubLenCloud, "map");
+        int car_id = 0;
+        for (auto& marker : leftCarMarkerArray->markers) {
+            marker.id = car_id++;
+        }
+        car_id = 0;
+        for (auto& marker : rightCarMarkerArray->markers) {
+            marker.id = car_id++;
+        }
     }
 };
 
